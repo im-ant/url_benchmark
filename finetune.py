@@ -45,13 +45,13 @@ class Workspace:
                              use_tb=cfg.use_tb,
                              use_wandb=cfg.use_wandb)
         # create envs
-
         self.train_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
                                   cfg.action_repeat, cfg.seed)
         self.eval_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
                                  cfg.action_repeat, cfg.seed)
 
         # create agent
+        print('Initializing agent...')
         self.agent = make_agent(cfg.obs_type,
                                 self.train_env.observation_spec(),
                                 self.train_env.action_spec(),
@@ -62,6 +62,7 @@ class Workspace:
         if cfg.snapshot_ts > 0:
             pretrained_agent = self.load_snapshot()['agent']
             self.agent.init_from(pretrained_agent)
+            print('Loaded snapshop agent', pretrained_agent)  
 
         # get meta specs
         meta_specs = self.agent.get_meta_specs()
@@ -72,6 +73,7 @@ class Workspace:
                       specs.Array((1,), np.float32, 'discount'))
 
         # create data storage
+        print('Creating data storage and replay buffer..')
         self.replay_storage = ReplayBufferStorage(data_specs, meta_specs,
                                                   self.work_dir / 'buffer')
 
@@ -139,6 +141,7 @@ class Workspace:
             log('step', self.global_step)
 
     def train(self):
+        print('Starting training..')  # TODO: delete
         # predicates
         train_until_step = utils.Until(self.cfg.num_train_frames,
                                        self.cfg.action_repeat)
@@ -237,6 +240,11 @@ class Workspace:
         if payload is not None:
             return payload
         # otherwise try random seed
+
+        # NOTE (AC): throwing error, TODO: maybe make more clean?
+        ssdp = snapshot_dir / str(self.cfg.seed) / f'snapshot_{self.cfg.snapshot_ts}.pt'
+        raise RuntimeError(f'Did not find snapshot at: {ssdp}')
+
         while True:
             seed = np.random.randint(1, 11)
             payload = try_load(seed)
