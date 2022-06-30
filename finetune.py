@@ -141,7 +141,6 @@ class Workspace:
             log('step', self.global_step)
 
     def train(self):
-        print('Starting training..')  # TODO: delete
         # predicates
         train_until_step = utils.Until(self.cfg.num_train_frames,
                                        self.cfg.action_repeat)
@@ -217,6 +216,7 @@ class Workspace:
             time_step = self.train_env.step(action)
             episode_reward += time_step.reward
             self.replay_storage.add(time_step, meta)
+            self.agent.add(time_step, meta, self.global_step)  # NOTE: added this for online processing
             self.train_video_recorder.record(time_step.observation)
             episode_step += 1
             self._global_step += 1

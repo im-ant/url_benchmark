@@ -138,6 +138,7 @@ class DDPGAgent:
                  init_critic,
                  use_tb,
                  use_wandb,
+                 update_encoder,
                  meta_dim=0):
         self.reward_free = reward_free
         self.obs_type = obs_type
@@ -229,6 +230,10 @@ class DDPGAgent:
             if step < self.num_expl_steps:
                 action.uniform_(-1.0, 1.0)
         return action.cpu().numpy()[0]
+
+    def add(self, time_step_obj, meta, step):
+        # Dummy method
+        pass  # TODO: return metrics?
 
     def update_critic(self, obs, action, reward, discount, next_obs, step):
         metrics = dict()
