@@ -31,7 +31,6 @@ mc_buffer_cfg:
 value_head_cfg:
   _target_: modules.neural_dictionary.NeuralKNN
   _recursive_: False
-  capacity: 10000
   key_dim: ${agent.hidden_dim}
-  k_neighbours: 128
+  capacity: 10000
 
