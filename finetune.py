@@ -235,24 +235,21 @@ class Workspace:
                 payload = torch.load(f, map_location=self.device)
             return payload
 
+        # TODO: should have config for which pretraining seed to use, rather
+        #       than use the same seed as fine-tuning
+
         # try to load current seed
         payload = try_load(self.cfg.seed)
         if payload is not None:
             return payload
-        # otherwise try random seed
-
-        # NOTE (AC): throwing error instead of continuing to try
-        # TODO: maybe make more clean? and should be able to try multiple seeds
-        #       can instead have config specify which seed to use?
-        ssdp = snapshot_dir / str(self.cfg.seed) / f'snapshot_{self.cfg.snapshot_ts}.pt'
-        raise RuntimeError(f'Did not find snapshot at: {ssdp}')
-
-        while True:
-            seed = np.random.randint(1, 11)
+        # otherwise try all the seed between 1-10
+        for seed in range(1, 11):
             payload = try_load(seed)
             if payload is not None:
                 return payload
-        return None
+        # otherwise throw error
+        ssdp = snapshot_dir / '[1-11]' / f'snapshot_{self.cfg.snapshot_ts}.pt'
+        raise RuntimeError(f'Did not find snapshot at: {ssdp}')
 
 
 @hydra.main(config_path='.', config_name='finetune')
