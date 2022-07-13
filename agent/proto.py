@@ -43,13 +43,13 @@ class Projector(nn.Module):
 
 class ProtoAgent(DDPGAgent):
     def __init__(self, pred_dim, proj_dim, queue_size, num_protos, tau,
-                 encoder_target_tau, topk, update_encoder, **kwargs):
+                 encoder_target_tau, topk, **kwargs):
         super().__init__(**kwargs)
         self.tau = tau
         self.encoder_target_tau = encoder_target_tau
         self.topk = topk
         self.num_protos = num_protos
-        self.update_encoder = update_encoder
+        # NOTE: self.update_encoder is set in parent DDPGAgent
 
         # models
         self.encoder_target = deepcopy(self.encoder)

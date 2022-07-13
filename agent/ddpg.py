@@ -158,6 +158,8 @@ class DDPGAgent:
         self.feature_dim = feature_dim
         self.solved_meta = None
 
+        self.update_encoder = update_encoder
+
         # models
         if obs_type == 'pixels':
             self.aug = utils.RandomShiftsAug(pad=4)
@@ -170,7 +172,6 @@ class DDPGAgent:
 
         self.actor = Actor(obs_type, self.obs_dim, self.action_dim,
                            feature_dim, hidden_dim).to(device)
-
         self.critic = Critic(obs_type, self.obs_dim, self.action_dim,
                              feature_dim, hidden_dim).to(device)
         self.critic_target = Critic(obs_type, self.obs_dim, self.action_dim,
@@ -189,6 +190,7 @@ class DDPGAgent:
 
         self.train()
         self.critic_target.train()
+
 
     def train(self, training=True):
         self.training = training

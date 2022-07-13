@@ -95,6 +95,15 @@ class NonParametricCritic(nn.Module):
             return
 
 
+"""
+self,
+
+name, reward_free, obs_type, obs_shape, action_shape,
+device, lr, feature_dim, hidden_dim, critic_target_tau,
+num_expl_steps, update_every_steps, stddev_schedule, nstep,
+batch_size, stddev_clip, init_critic, use_tb, use_wandb, update_encoder, meta_dim=0
+"""
+
 class NonParamDDPGAgent(DDPGAgent):
     def __init__(self, name, reward_free, obs_type, obs_shape, action_shape,
                  device, lr, feature_dim, hidden_dim,
@@ -102,42 +111,14 @@ class NonParamDDPGAgent(DDPGAgent):
                  stddev_schedule, nstep, batch_size, stddev_clip,
                  init_critic, double_q, value_head_cfg, mc_buffer_cfg,
                  use_tb, use_wandb, update_encoder, meta_dim=0):
-        self.reward_free = reward_free
-        self.obs_type = obs_type
-        self.obs_shape = obs_shape
-        self.action_dim = action_shape[0]
-        self.hidden_dim = hidden_dim
-
-        self.lr = lr
-        self.device = device
-
-        self.critic_target_tau = critic_target_tau
-        self.update_every_steps = update_every_steps
-
-        self.use_tb = use_tb
-        self.use_wandb = use_wandb
-        self.num_expl_steps = num_expl_steps
-        self.stddev_schedule = stddev_schedule
-        self.stddev_clip = stddev_clip
-        self.init_critic = init_critic
-        self.feature_dim = feature_dim
-        self.solved_meta = None
+        super().__init__(name, reward_free, obs_type, obs_shape, action_shape,
+                         device, lr, feature_dim, hidden_dim, critic_target_tau,
+                         num_expl_steps, update_every_steps, stddev_schedule,
+                         nstep, batch_size, stddev_clip, init_critic, use_tb,
+                         use_wandb, update_encoder, meta_dim=0)
 
         self.double_q = double_q
-
-        # models
-        if obs_type == 'pixels':
-            self.aug = utils.RandomShiftsAug(pad=4)
-            self.encoder = Encoder(obs_shape).to(device)
-            self.obs_dim = self.encoder.repr_dim + meta_dim
-        else:
-            self.aug = nn.Identity()
-            self.encoder = nn.Identity()
-            self.obs_dim = obs_shape[0] + meta_dim
-
-        self.actor = Actor(obs_type, self.obs_dim, self.action_dim,
-                           feature_dim, hidden_dim).to(device)
-
+        
         self.critic = NonParametricCritic(
             obs_type, self.obs_dim, self.action_dim, feature_dim,
             hidden_dim, value_head_cfg
@@ -308,6 +289,10 @@ class NonParamDDPGAgent(DDPGAgent):
         obs = self.aug_and_encode(obs)
         with torch.no_grad():
             next_obs = self.aug_and_encode(next_obs)
+
+        if not self.update_encoder:
+            obs = obs.detach()
+            next_obs = next_obs.detach()
 
         if self.use_tb or self.use_wandb:
             metrics['batch_reward'] = reward.mean().item()
