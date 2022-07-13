@@ -62,7 +62,7 @@ class Workspace:
         if cfg.snapshot_ts > 0:
             pretrained_agent = self.load_snapshot()['agent']
             self.agent.init_from(pretrained_agent)
-            print('Loaded snapshop agent', pretrained_agent)  
+            print('Loaded snapshop agent', pretrained_agent)
 
         # get meta specs
         meta_specs = self.agent.get_meta_specs()
@@ -241,7 +241,9 @@ class Workspace:
             return payload
         # otherwise try random seed
 
-        # NOTE (AC): throwing error, TODO: maybe make more clean?
+        # NOTE (AC): throwing error instead of continuing to try
+        # TODO: maybe make more clean? and should be able to try multiple seeds
+        #       can instead have config specify which seed to use?
         ssdp = snapshot_dir / str(self.cfg.seed) / f'snapshot_{self.cfg.snapshot_ts}.pt'
         raise RuntimeError(f'Did not find snapshot at: {ssdp}')
 
