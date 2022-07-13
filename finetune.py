@@ -232,7 +232,7 @@ class Workspace:
             if not snapshot.exists():
                 return None
             with snapshot.open('rb') as f:
-                payload = torch.load(f)
+                payload = torch.load(f, map_location=self.device)
             return payload
 
         # try to load current seed
