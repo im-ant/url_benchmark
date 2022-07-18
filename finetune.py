@@ -26,7 +26,14 @@ torch.backends.cudnn.benchmark = True
 def make_agent(obs_type, obs_spec, action_spec, num_expl_steps, cfg):
     cfg.obs_type = obs_type
     cfg.obs_shape = obs_spec.shape
-    cfg.action_shape = action_spec.shape
+
+    if type(action_spec) == specs.BoundedArray:
+        cfg.action_shape = action_spec.shape
+    elif type(action_spec) == specs.DiscreteArray:
+        cfg.num_actions = action_spec.num_values
+    else:
+        raise NotImplementedError
+
     cfg.num_expl_steps = num_expl_steps
     return hydra.utils.instantiate(cfg)
 
@@ -46,9 +53,11 @@ class Workspace:
                              use_wandb=cfg.use_wandb)
         # create envs
         self.train_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
-                                  cfg.action_repeat, cfg.seed)
+                                  cfg.action_repeat, cfg.discretize_action,
+                                  cfg.seed)
         self.eval_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
-                                 cfg.action_repeat, cfg.seed)
+                                 cfg.action_repeat, cfg.discretize_action,
+                                 cfg.seed)
 
         # create agent
         print('Initializing agent...')
@@ -152,6 +161,7 @@ class Workspace:
         episode_step, episode_reward = 0, 0
         time_step = self.train_env.reset()
         meta = self.agent.init_meta()
+
         self.replay_storage.add(time_step, meta)
         self.train_video_recorder.init(time_step.observation)
         metrics = None
