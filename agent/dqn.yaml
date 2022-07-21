@@ -1,0 +1,47 @@
+# @package agent
+_target_: agent.dqn.DQNAgent
+_recursive_: False
+
+name: dqn
+reward_free: ${reward_free}
+obs_type: ??? # to be specified later
+obs_shape: ??? # to be specified later
+# action_shape: ??? # to be specified later
+num_actions: ???
+device: ${device}
+
+init_critic: True
+update_encoder: ${update_encoder}
+
+use_tb: ${use_tb}
+use_wandb: ${use_wandb}
+
+nstep: 3
+batch_size: 1024 # 256 for pixels
+
+double_q: True
+max_grad_norm: 10.0
+
+lr: 1e-4
+update_every_steps: 2
+
+critic_target_tau: 0.01
+critic_target_freq: 1  # update target per n critic updates
+
+# Policy and exploration
+num_expl_steps: ???
+eps_schedule: 'linear(1.0,0.01,100000)'  # For eps greedy policy
+
+
+encoder_cfg:
+  _target_: agent.dqn.ConvEncoder  # Only used for pixels
+  obs_shape: ???
+  feature_dim: 50
+
+critic_cfg:
+  _target_: agent.dqn.DeepCritic
+  input_dim: ???
+  hidden_dim: 1024
+  hidden_depth: 1
+  num_actions: ???
+  dueling: True
