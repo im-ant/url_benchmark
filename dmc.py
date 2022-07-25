@@ -1,4 +1,5 @@
 from collections import OrderedDict, deque
+import itertools
 from typing import Any, NamedTuple
 
 import dm_env
@@ -264,6 +265,58 @@ class ExtendedTimeStepWrapper(dm_env.Environment):
         return getattr(self._env, name)
 
 
+class DiscretizedActionWrapper(dm_env.Environment):
+    """
+    Wrapper to discretize the action space
+    """
+    def __init__(self, env):
+        self._env = env
+
+        wrapped_action_spec = env.action_spec()
+        assert isinstance(wrapped_action_spec, specs.BoundedArray)
+        cont_action_dim = wrapped_action_spec.shape[0]
+
+        # Create action embeddings
+        per_dim_bins = [-0.5, 0.0, 0.5]  # NOTE TODO: pre-set for now, maybe make custom
+
+        dim_bin_list = [np.array(per_dim_bins) for i in range(cont_action_dim)]
+        self.embedding = np.array([x for x in itertools.product(*dim_bin_list)])
+        self.num_actions = self.embedding.shape[0]
+
+        # Discrete action spec
+        self._action_spec = specs.DiscreteArray(self.num_actions,
+                                                dtype=np.int32,
+                                                name='action')
+
+    def reset(self):
+        time_step = self._env.reset()
+
+        # Un-doing the ExtendedTimeStepWrapper augmentation for discrete acts
+        if time_step.action.shape != self._action_spec.shape:
+            action_idx_const = self.num_actions // 2
+            a_idx = np.array(action_idx_const, dtype=np.int32)
+
+        return ExtendedTimeStep(observation=time_step.observation,
+                                step_type=time_step.step_type,
+                                action=a_idx,
+                                reward=time_step.reward or 0.0,
+                                discount=time_step.discount or 1.0)
+
+    def step(self, action):
+        continuous_action = self.embedding[action]
+        time_step = self._env.step(continuous_action)
+        return self._augment_time_step(time_step, action)
+
+    def observation_spec(self):
+        return self._env.observation_spec()
+
+    def action_spec(self):
+        return self._action_spec
+
+    def __getattr__(self, name):
+        return getattr(self._env, name)
+
+
 def _make_jaco(obs_type, domain, task, frame_stack, action_repeat, seed):
     env = cdmc.make_jaco(task, obs_type, seed)
     env = ActionDTypeWrapper(env, np.float32)
@@ -299,7 +352,7 @@ def _make_dmc(obs_type, domain, task, frame_stack, action_repeat, seed):
     return env
 
 
-def make(name, obs_type, frame_stack, action_repeat, seed):
+def make(name, obs_type, frame_stack, action_repeat, discretize_action, seed):
     assert obs_type in ['states', 'pixels']
     domain, task = name.split('_', 1)
     domain = dict(cup='ball_in_cup').get(domain, domain)
@@ -314,4 +367,8 @@ def make(name, obs_type, frame_stack, action_repeat, seed):
 
     env = action_scale.Wrapper(env, minimum=-1.0, maximum=+1.0)
     env = ExtendedTimeStepWrapper(env)
+
+    if discretize_action:
+        env = DiscretizedActionWrapper(env)
+
     return env

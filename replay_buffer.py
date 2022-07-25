@@ -49,7 +49,8 @@ class ReplayBufferStorage:
             value = time_step[spec.name]
             if np.isscalar(value):
                 value = np.full(spec.shape, value, spec.dtype)
-            assert spec.shape == value.shape and spec.dtype == value.dtype
+            assert spec.shape == value.shape, f'shape: {spec.shape} {value.shape}'
+            assert spec.dtype == value.dtype, f'dtype: {spec.dtype} {value.dtype}'
             self._current_episode[spec.name].append(value)
         if time_step.last():
             episode = dict()
@@ -187,9 +188,13 @@ def make_replay_loader(storage, max_size, batch_size, num_workers,
                             fetch_every=1000,
                             save_snapshot=save_snapshot)
 
-    loader = torch.utils.data.DataLoader(iterable,
-                                         batch_size=batch_size,
-                                         num_workers=num_workers,
-                                         pin_memory=True,
-                                         worker_init_fn=_worker_init_fn)
+    loader = torch.utils.data.DataLoader(
+        iterable, batch_size=batch_size, num_workers=num_workers,
+        pin_memory=True, worker_init_fn=_worker_init_fn,
+        multiprocessing_context='fork',
+    )
+    # NOTE: multiprocessing_context='fork' ONLY because of
+    #       https://github.com/facebookresearch/hydra/issues/964
+    #       need dataloader to not crash when use with hydra joblib launcher
+
     return loader

@@ -26,7 +26,14 @@ torch.backends.cudnn.benchmark = True
 def make_agent(obs_type, obs_spec, action_spec, num_expl_steps, cfg):
     cfg.obs_type = obs_type
     cfg.obs_shape = obs_spec.shape
-    cfg.action_shape = action_spec.shape
+
+    if type(action_spec) == specs.BoundedArray:
+        cfg.action_shape = action_spec.shape
+    elif type(action_spec) == specs.DiscreteArray:
+        cfg.num_actions = action_spec.num_values
+    else:
+        raise NotImplementedError
+
     cfg.num_expl_steps = num_expl_steps
     return hydra.utils.instantiate(cfg)
 
@@ -46,9 +53,11 @@ class Workspace:
                              use_wandb=cfg.use_wandb)
         # create envs
         self.train_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
-                                  cfg.action_repeat, cfg.seed)
+                                  cfg.action_repeat, cfg.discretize_action,
+                                  cfg.seed)
         self.eval_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
-                                 cfg.action_repeat, cfg.seed)
+                                 cfg.action_repeat, cfg.discretize_action,
+                                 cfg.seed)
 
         # create agent
         print('Initializing agent...')
@@ -62,7 +71,7 @@ class Workspace:
         if cfg.snapshot_ts > 0:
             pretrained_agent = self.load_snapshot()['agent']
             self.agent.init_from(pretrained_agent)
-            print('Loaded snapshop agent', pretrained_agent)  
+            print('Loaded snapshop agent', pretrained_agent)
 
         # get meta specs
         meta_specs = self.agent.get_meta_specs()
@@ -141,7 +150,6 @@ class Workspace:
             log('step', self.global_step)
 
     def train(self):
-        print('Starting training..')  # TODO: delete
         # predicates
         train_until_step = utils.Until(self.cfg.num_train_frames,
                                        self.cfg.action_repeat)
@@ -153,6 +161,7 @@ class Workspace:
         episode_step, episode_reward = 0, 0
         time_step = self.train_env.reset()
         meta = self.agent.init_meta()
+
         self.replay_storage.add(time_step, meta)
         self.train_video_recorder.init(time_step.observation)
         metrics = None
@@ -217,6 +226,7 @@ class Workspace:
             time_step = self.train_env.step(action)
             episode_reward += time_step.reward
             self.replay_storage.add(time_step, meta)
+            self.agent.add(time_step, meta, self.global_step)  # NOTE: added this for online processing
             self.train_video_recorder.record(time_step.observation)
             episode_step += 1
             self._global_step += 1
@@ -232,25 +242,24 @@ class Workspace:
             if not snapshot.exists():
                 return None
             with snapshot.open('rb') as f:
-                payload = torch.load(f)
+                payload = torch.load(f, map_location=self.device)
             return payload
+
+        # TODO: should have config for which pretraining seed to use, rather
+        #       than use the same seed as fine-tuning
 
         # try to load current seed
         payload = try_load(self.cfg.seed)
         if payload is not None:
             return payload
-        # otherwise try random seed
-
-        # NOTE (AC): throwing error, TODO: maybe make more clean?
-        ssdp = snapshot_dir / str(self.cfg.seed) / f'snapshot_{self.cfg.snapshot_ts}.pt'
-        raise RuntimeError(f'Did not find snapshot at: {ssdp}')
-
-        while True:
-            seed = np.random.randint(1, 11)
+        # otherwise try all the seed between 1-10
+        for seed in range(1, 11):
             payload = try_load(seed)
             if payload is not None:
                 return payload
-        return None
+        # otherwise throw error
+        ssdp = snapshot_dir / '[1-11]' / f'snapshot_{self.cfg.snapshot_ts}.pt'
+        raise RuntimeError(f'Did not find snapshot at: {ssdp}')
 
 
 @hydra.main(config_path='.', config_name='finetune')

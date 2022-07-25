@@ -256,6 +256,7 @@ class RandomShiftsAug(nn.Module):
 
 class RMS(object):
     """running mean and std """
+
     def __init__(self, device, epsilon=1e-4, shape=(1,)):
         self.M = torch.zeros(shape).to(device)
         self.S = torch.ones(shape).to(device)
@@ -278,6 +279,7 @@ class RMS(object):
 
 class PBE(object):
     """particle-based entropy based on knn normalized by running mean """
+
     def __init__(self, rms, knn_clip, knn_k, knn_avg, knn_rms, device):
         self.rms = rms
         self.knn_rms = knn_rms
@@ -317,3 +319,78 @@ class PBE(object):
             reward = reward.mean(dim=1, keepdim=True)  # (b1, 1)
         reward = torch.log(reward + 1.0)
         return reward
+
+
+class MCReturnBuffer(object):
+    """
+    Buffer for storing entries and associated MC returns
+    """
+
+    def __init__(self, capacity, discount):
+        self.capacity = capacity
+        self.discount = discount
+
+        self.QD = {
+            'return': np.empty((capacity, 1), dtype=float),
+            'step': np.empty((capacity, 1), dtype=float),
+        }
+
+        self.initialized = False
+        self.idx = 0
+        self.size = 0
+
+    def init(self, obs_dict):
+        """
+        Initializes the internal QD array with the right shape and capacity
+        for each of the observations one wishes to store
+        :param obs_dict:
+        :return:
+        """
+        # Initialize
+        for k in obs_dict:
+            if k in self.QD:
+                raise Exception("Key already in Queue")
+            obs_dtype = obs_dict[k].dtype  # NOTE: needs to be np object
+            obs_shape = np.shape(obs_dict[k])
+            q_shape = (self.capacity, ) + obs_shape
+            self.QD[k] = np.empty(q_shape, dtype=obs_dtype)
+
+        self.initialized = True
+
+    def add(self, obs_dict, reward, step):
+        """
+
+        :param obs_dict:
+        :param reward:
+        :param step:
+        :return:
+        """
+        # Store current time observations, steps, and immediate reward
+        for k in obs_dict:
+            self.QD[k][self.idx] = obs_dict[k]
+        self.QD['step'][self.idx] = step
+        self.QD['return'][self.idx] = reward
+
+        # Update discounted cumulative reward for all entries
+        step_vec = self.QD['step'][:self.size]
+        ret_vec = self.QD['return'][:self.size]
+
+        d_step = step - step_vec
+        discounts_vec = self.discount ** d_step
+        self.QD['return'][:self.size] = ret_vec + (reward * discounts_vec)
+
+        # Circular buffer TODO: fix this to have other options?
+        self.idx = (self.idx + 1) % self.capacity
+        self.size = min((self.size + 1), self.capacity)
+
+    def flush(self):
+        """
+        Flush the items in the buffer as numpy arrays
+        :return:
+        """
+        out_dict = {k: self.QD[k][:self.size] for k in self.QD}
+
+        self.idx = 0
+        self.size = 0
+
+        return out_dict
