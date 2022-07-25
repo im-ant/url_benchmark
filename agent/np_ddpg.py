@@ -118,7 +118,7 @@ class NonParamDDPGAgent(DDPGAgent):
                          use_wandb, update_encoder, meta_dim=0)
 
         self.double_q = double_q
-        
+
         self.critic = NonParametricCritic(
             obs_type, self.obs_dim, self.action_dim, feature_dim,
             hidden_dim, value_head_cfg
@@ -144,6 +144,7 @@ class NonParamDDPGAgent(DDPGAgent):
 
         # Buffer for storing MC returns
         self.mc_buffer = utils.MCReturnBuffer(**mc_buffer_cfg)
+
 
     def init_from(self, other):
         # copy parameters over
