@@ -160,6 +160,8 @@ class DDPGAgent:
 
         self.update_encoder = update_encoder
 
+        self.device = device
+
         # models
         if obs_type == 'pixels':
             self.aug = utils.RandomShiftsAug(pad=4)

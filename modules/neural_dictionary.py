@@ -29,9 +29,8 @@ class BaseScoreFunction(nn.Module):
 class CosineSimilaritySF(BaseScoreFunction):
     """Cosine similarity score function"""
 
-    def __init__(self, feature_dims):
+    def __init__(self, eps=1e-6):
         super(CosineSimilaritySF, self).__init__()
-        self.feature_dims = feature_dims
         self.eps = 1e-6  # numerical stability
 
     def forward(self, mat1, mat2):
@@ -49,18 +48,18 @@ class CosineSimilaritySF(BaseScoreFunction):
 
 
 class NeuralDictionary(nn.Module):
-    def __init__(self, capacity, key_dim):
+    def __init__(self, key_dim, value_dim, capacity, keys_grad, values_grad):
         super(NeuralDictionary, self).__init__()
         self.capacity = capacity
         self.key_dim = key_dim
-        self.value_dim = 1  # TODO: maybe make this customizable?
+        self.value_dim = value_dim
 
         self.keys = nn.parameter.Parameter(
             torch.empty((capacity, self.key_dim)),
-            requires_grad=True)
+            requires_grad=keys_grad)
         self.values = nn.parameter.Parameter(
             torch.empty(capacity, self.value_dim),
-            requires_grad=True)
+            requires_grad=values_grad)
 
         # TODO: initialize weights here or no?
         # nn.init.normal_(self.keys)
@@ -71,8 +70,9 @@ class NeuralDictionary(nn.Module):
 
 
 class SoftNeuralDictionary(NeuralDictionary):
-    def __init__(self, capacity, key_dim, temperature, score_fn_cfg):
-        super(SoftNeuralDictionary, self).__init__(capacity, key_dim)
+    def __init__(self, temperature, score_fn_cfg,
+                 **kwargs):
+        super(SoftNeuralDictionary, self).__init__(**kwargs)
         self.temperature = temperature
 
         self.log_temp = nn.parameter.Parameter(
@@ -81,9 +81,10 @@ class SoftNeuralDictionary(NeuralDictionary):
         nn.init.zeros_(self.keys)
         nn.init.zeros_(self.values)
 
+
         self.score_fn = hydra.utils.instantiate(score_fn_cfg)
 
-        self.mem_idx = 0
+        self.mem_idx = 0  # TODO make multi dimensional?
         self.mem_size = 0
 
     def forward(self, queries):
@@ -113,20 +114,25 @@ class SoftNeuralDictionary(NeuralDictionary):
 
 
 class NeuralKNN(NeuralDictionary):
-    def __init__(self, capacity, key_dim, k_neighbours):
-        super(NeuralKNN, self).__init__(capacity, key_dim)
+    def __init__(self, k_neighbours, **kwargs):
+        super(NeuralKNN, self).__init__(**kwargs)
         self.k_neighbours = k_neighbours
+        # self.mem_idxes = torch.zeros((self.value_dim), dtype=torch.int)
+        # self.mem_sizes = torch.zeros((self.value_dim), dtype=torch.int)
         self.mem_idx = 0
         self.mem_size = 0
+
+        nn.init.constant_(self.keys, float("Inf"))
+        nn.init.constant_(self.values, 0.)
 
         self.eps = 1e-8
 
     def forward(self, queries):
-        # TODO: dummy variable, fix this and use just a single one
         return self.forward_matmul(queries)
 
     def forward_matmul(self, queries):
         """
+        Old, deprecating the
         Compute k-nn value estimates, implemented from scratch
         :param queries: state or minibatches of states, shape (B, key_dim)
         :return: value vector of size (B, value_dim)

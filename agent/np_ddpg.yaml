@@ -2,17 +2,21 @@
 _target_: agent.np_ddpg.NonParamDDPGAgent
 _recursive_: False
 name: np_ddpg
+
 reward_free: ${reward_free}
 obs_type: ??? # to be specified later
 obs_shape: ??? # to be specified later
 action_shape: ??? # to be specified later
 device: ${device}
-lr: 1e-4
-critic_target_tau: 0.01
-update_every_steps: 2
+
 use_tb: ${use_tb}
 use_wandb: ${use_wandb}
 num_expl_steps: ??? # to be specified later
+
+lr: 1e-4
+critic_target_tau: 0.01
+update_every_steps: 2
+
 hidden_dim: 1024
 feature_dim: 50
 stddev_schedule: 0.2
@@ -22,15 +26,22 @@ batch_size: 1024 # 256 for pixels
 init_critic: true
 update_encoder: ${update_encoder}
 
-double_q: True
+twin_q: True
 
 mc_buffer_cfg:
   capacity: 20000
   discount: ${discount}
 
+# critic attributes (TODO future: make critic_cfg)
+memory_overwrite: "cyclic"
+
 value_head_cfg:
   _target_: modules.neural_dictionary.NeuralKNN
   _recursive_: False
   key_dim: ${agent.hidden_dim}
+  value_dim: 1
+  keys_grad: True
+  values_grad: True
   capacity: 10000
+  # k_neighbours: 256
 

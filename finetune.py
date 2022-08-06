@@ -70,6 +70,7 @@ class Workspace:
         # initialize from pretrained
         if cfg.snapshot_ts > 0:
             pretrained_agent = self.load_snapshot()['agent']
+            print(self.agent, pretrained_agent)
             self.agent.init_from(pretrained_agent)
             print('Loaded snapshop agent', pretrained_agent)
 
@@ -227,18 +228,29 @@ class Workspace:
             episode_reward += time_step.reward
             self.replay_storage.add(time_step, meta)
             self.agent.add(time_step, meta, self.global_step)  # NOTE: added this for online processing
+
             self.train_video_recorder.record(time_step.observation)
+            # try to save snapshot
+            if self.cfg.save_snapshots and self.global_frame in self.cfg.snapshots:
+                self.save_snapshot()
+
             episode_step += 1
             self._global_step += 1
 
     def load_snapshot(self):
         snapshot_base_dir = Path(self.cfg.snapshot_base_dir)
-        domain, _ = self.cfg.task.split('_', 1)
-        snapshot_dir = snapshot_base_dir / self.cfg.obs_type / domain / self.cfg.agent.name
+        if self.cfg.snapshot_child_dir is None:
+            domain, _ = self.cfg.task.split('_', 1)
+            snapshot_dir = snapshot_base_dir / self.cfg.obs_type / domain / self.cfg.agent.name
+        else:
+            snapshot_dir = snapshot_base_dir / Path(self.cfg.snapshot_child_dir)
 
         def try_load(seed):
-            snapshot = snapshot_dir / str(
-                seed) / f'snapshot_{self.cfg.snapshot_ts}.pt'
+            if self.cfg.snapshot_child_dir is None:
+                snapshot = snapshot_dir / str(
+                    seed) / f'snapshot_{self.cfg.snapshot_ts}.pt'
+            else:
+                snapshot = snapshot_dir / f'snapshot_{self.cfg.snapshot_ts}.pt'
             if not snapshot.exists():
                 return None
             with snapshot.open('rb') as f:
@@ -260,6 +272,16 @@ class Workspace:
         # otherwise throw error
         ssdp = snapshot_dir / '[1-11]' / f'snapshot_{self.cfg.snapshot_ts}.pt'
         raise RuntimeError(f'Did not find snapshot at: {ssdp}')
+
+    def save_snapshot(self):
+        # TODO: see this works still
+        snapshot_dir = self.work_dir / Path(self.cfg.snapshot_out_dir)
+        snapshot_dir.mkdir(exist_ok=True, parents=True)
+        snapshot = snapshot_dir / f'snapshot_{self.global_frame}.pt'
+        keys_to_save = ['agent', '_global_step', '_global_episode']
+        payload = {k: self.__dict__[k] for k in keys_to_save}
+        with snapshot.open('wb') as f:
+            torch.save(payload, f)
 
 
 @hydra.main(config_path='.', config_name='finetune')
