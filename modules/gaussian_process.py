@@ -78,3 +78,27 @@ class IIDGaussianNoiseGP(NeuralDictionary):
         kstar = self.kernel(queries, self.keys[:self.mem_size, :])  # (B, M)
         y_mean = kstar @ self.invKIMat @ self.values[:self.mem_size,:]  # (B, ?)
         return y_mean
+
+    def detailed_forward(self, queries):
+        self.inplace_compute_covariances()  # TODO: do this every step?
+        if self.invKIMat == None:
+            raise Exception('inverse covariance matrix is not initialized')
+
+        kstar = self.kernel(queries, self.keys[:self.mem_size, :])  # (B, M)
+        kInvKIMat = kstar @ self.invKIMat  # (B, M)
+
+        # Compute mean prediction
+        y_mean = kInvKIMat @ self.values[:self.mem_size,:]  # (B, ?)
+
+        # Compute variance of each element in batch
+        bCov = self.kernel(queries.unsqueeze(1), queries.unsqueeze(1))  # (B, 1, 1)
+        bxCov = (kInvKIMat.unsqueeze(1) @
+                 kstar.unsqueeze(1).transpose(1,2))  # (B, 1, M) @ (B, M, 1)
+        batch_var = (bCov - bxCov).squeeze()  # (B,)
+
+        # Metrics
+        cur_metrics = {
+            'batch_f_mean_var': batch_var.detach().mean().item()
+        }
+
+        return y_mean, cur_metrics

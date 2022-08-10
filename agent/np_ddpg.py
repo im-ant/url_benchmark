@@ -51,6 +51,10 @@ class NonParametricCritic(nn.Module):
         self.apply(utils.weight_init)
 
     def forward(self, obs, action):
+        q1, q2, info1, info2 = self.detailed_forward(obs, action)
+        return q1, q2
+
+    def detailed_forward(self, obs, action):
         inpt = obs if self.obs_type == 'pixels' else torch.cat([obs, action],
                                                                dim=-1)
         h = self.trunk(inpt)
@@ -59,10 +63,14 @@ class NonParametricCritic(nn.Module):
         phis_1 = self.Q1_neck(h)
         phis_2 = self.Q2_neck(h)
 
-        q1 = self.Q1_head(phis_1)
-        q2 = self.Q1_head(phis_2)
+        if hasattr(self.Q1_head, 'detailed_forward'):
+            q1, info1 = self.Q1_head.detailed_forward(phis_1)
+            q2, info2 = self.Q2_head.detailed_forward(phis_2)
+        else:
+            q1, info1 = self.Q1_head(phis_1), None
+            q2, info2 = self.Q2_head(phis_2), None
 
-        return q1, q2
+        return q1, q2, info1, info2
 
     def add(self, obs, action, values):
         """Method to add entries to dictionary"""
@@ -179,7 +187,7 @@ class NonParamDDPGAgent(DDPGAgent):
                 target_V = target_Q1
             target_Q = reward + (discount * target_V)
 
-        Q1, Q2 = self.critic(obs, action)
+        Q1, Q2, info1, info2 = self.critic.detailed_forward(obs, action)
         if self.twin_q:
             critic_loss = F.mse_loss(Q1, target_Q) + F.mse_loss(Q2, target_Q)
         else:
@@ -190,6 +198,8 @@ class NonParamDDPGAgent(DDPGAgent):
             metrics['critic_q1'] = Q1.mean().item()
             metrics['critic_q2'] = Q2.mean().item()
             metrics['critic_loss'] = critic_loss.item()
+            for k in info1:
+                metrics[k] = info1[k]
 
         # optimize critic
         if self.encoder_opt is not None:
