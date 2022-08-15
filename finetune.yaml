@@ -20,15 +20,15 @@ num_seed_frames: 4000
 # eval
 eval_every_frames: 10000
 num_eval_episodes: 10
-# pretrained
-snapshot_ts: 100000
+# load pretrained
 snapshot_base_dir: /home/anthony/Project/url_benchmark/models
 snapshot_child_dir: null
+snapshot_ts: 100000
 
 # save model
 save_snapshots: False
+snapshot_out_dir: ./snapshots
 snapshots: [100000, 500000, 1000000, 2000000]
-snapshot_out_dir: ./snapshot_out
 
 # replay buffer
 replay_buffer_size: 1000000

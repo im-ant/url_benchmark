@@ -23,10 +23,14 @@ stddev_schedule: 0.2
 stddev_clip: 0.3
 nstep: 3
 batch_size: 1024 # 256 for pixels
-init_critic: true
-update_encoder: ${update_encoder}
-
 twin_q: True
+
+# Loading and finetuning
+init_actor: true
+init_critic: true
+init_critic_mode: 'only_trunk'
+update_encoder: ${update_encoder}
+detach_trunk_output: False
 
 mc_buffer_cfg:
   capacity: 20000
@@ -44,4 +48,3 @@ value_head_cfg:
   values_grad: True
   capacity: 10000
   # k_neighbours: 256
-

@@ -69,10 +69,12 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim):
+    def __init__(self, obs_type, obs_dim, action_dim, feature_dim,
+                 hidden_dim, detach_trunk_output):
         super().__init__()
 
         self.obs_type = obs_type
+        self.detach_trunk_output = detach_trunk_output
 
         if obs_type == 'pixels':
             # for pixels actions will be added after trunk
@@ -111,6 +113,9 @@ class Critic(nn.Module):
         h = self.trunk(inpt)
         h = torch.cat([h, action], dim=-1) if self.obs_type == 'pixels' else h
 
+        if self.detach_trunk_output:
+            h = h.detach()
+
         q1 = self.Q1(h)
         q2 = self.Q2(h)
 
@@ -118,13 +123,8 @@ class Critic(nn.Module):
 
 
 class DDPGAgent:
-    def __init__(self,
-                 name,
-                 reward_free,
-                 obs_type,
-                 obs_shape,
-                 action_shape,
-                 device,
+    def __init__(self, name, reward_free, obs_type, obs_shape, action_shape,
+                 device, init_actor, init_critic, init_critic_mode,
                  lr,
                  feature_dim,
                  hidden_dim,
@@ -135,26 +135,32 @@ class DDPGAgent:
                  nstep,
                  batch_size,
                  stddev_clip,
-                 init_critic,
                  use_tb,
                  use_wandb,
                  update_encoder,
+                 detach_trunk_output,
                  meta_dim=0):
         self.reward_free = reward_free
         self.obs_type = obs_type
         self.obs_shape = obs_shape
         self.action_dim = action_shape[0]
-        self.hidden_dim = hidden_dim
-        self.lr = lr
         self.device = device
-        self.critic_target_tau = critic_target_tau
-        self.update_every_steps = update_every_steps
+
+        self.init_actor = init_actor
+        self.init_critic = init_critic
+        self.init_critic_mode = init_critic_mode
+
         self.use_tb = use_tb
         self.use_wandb = use_wandb
+
+        self.hidden_dim = hidden_dim
+        self.lr = lr
+        self.critic_target_tau = critic_target_tau
+        self.update_every_steps = update_every_steps
         self.num_expl_steps = num_expl_steps
         self.stddev_schedule = stddev_schedule
         self.stddev_clip = stddev_clip
-        self.init_critic = init_critic
+
         self.feature_dim = feature_dim
         self.solved_meta = None
 
@@ -175,9 +181,11 @@ class DDPGAgent:
         self.actor = Actor(obs_type, self.obs_dim, self.action_dim,
                            feature_dim, hidden_dim).to(device)
         self.critic = Critic(obs_type, self.obs_dim, self.action_dim,
-                             feature_dim, hidden_dim).to(device)
+                             feature_dim, hidden_dim, detach_trunk_output
+                             ).to(device)
         self.critic_target = Critic(obs_type, self.obs_dim, self.action_dim,
-                                    feature_dim, hidden_dim).to(device)
+                                    feature_dim, hidden_dim, detach_trunk_output
+                                    ).to(device)
         self.critic_target.load_state_dict(self.critic.state_dict())
 
         # optimizers
@@ -203,9 +211,14 @@ class DDPGAgent:
     def init_from(self, other):
         # copy parameters over
         utils.hard_update_params(other.encoder, self.encoder)
-        utils.hard_update_params(other.actor, self.actor)
+        if self.init_actor:
+            utils.hard_update_params(other.actor, self.actor)
         if self.init_critic:
-            utils.hard_update_params(other.critic.trunk, self.critic.trunk)
+            if self.init_critic_mode == 'only_trunk':
+                utils.hard_update_params(other.critic.trunk, self.critic.trunk)
+            else:
+                raise NotImplementedError
+            self.critic_target.load_state_dict(self.critic.state_dict())
 
     def get_meta_specs(self):
         return tuple()
@@ -315,6 +328,10 @@ class DDPGAgent:
 
         if self.use_tb or self.use_wandb:
             metrics['batch_reward'] = reward.mean().item()
+
+        if not self.update_encoder:
+            obs = obs.detach()
+            next_obs = next_obs.detach()
 
         # update critic
         metrics.update(

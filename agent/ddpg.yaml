@@ -6,6 +6,13 @@ obs_type: ??? # to be specified later
 obs_shape: ??? # to be specified later
 action_shape: ??? # to be specified later
 device: ${device}
+
+init_actor: True
+init_critic: true
+init_critic_mode: 'only_trunk'
+update_encoder: ${update_encoder}
+detach_trunk_output: False
+
 lr: 1e-4
 critic_target_tau: 0.01
 update_every_steps: 2
@@ -18,5 +25,3 @@ stddev_schedule: 0.2
 stddev_clip: 0.3
 nstep: 3
 batch_size: 1024 # 256 for pixels
-init_critic: true
-update_encoder: ${update_encoder}

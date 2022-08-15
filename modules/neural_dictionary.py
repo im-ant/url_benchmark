@@ -110,7 +110,15 @@ class SoftNeuralDictionary(NeuralDictionary):
         # Combine with value entries to get state-action value estimates
         vs = torch.matmul(weights, self.values[:self.mem_size])  # (B, val_dim)
 
-        return vs, weights, scores
+        # metrics
+        with torch.no_grad():
+            ws_detach = weights.detach().cpu()
+            info = {
+                'weights_avg': ws_detach.mean().item(),
+                'weights_max': ws_detach.max().item(),
+            }
+
+        return vs, info
 
 
 class NeuralKNN(NeuralDictionary):

@@ -51,6 +51,8 @@ class ProtoAgent(DDPGAgent):
         self.num_protos = num_protos
         # NOTE: self.update_encoder is set in parent DDPGAgent
 
+        self.pred_dim = pred_dim
+
         # models
         self.encoder_target = deepcopy(self.encoder)
 

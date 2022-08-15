@@ -9,6 +9,8 @@ domain: walker # primal task will be infered in runtime
 obs_type: states # [states, pixels]
 frame_stack: 3 # only works if obs_type=pixels
 action_repeat: 1 # set to 2 for pixels
+discretize_action: False
+
 discount: 0.99
 # train settings
 num_train_frames: 2000010
