@@ -70,11 +70,10 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
     def __init__(self, obs_type, obs_dim, action_dim, feature_dim,
-                 hidden_dim, detach_trunk_output):
+                 hidden_dim):
         super().__init__()
 
         self.obs_type = obs_type
-        self.detach_trunk_output = detach_trunk_output
 
         if obs_type == 'pixels':
             # for pixels actions will be added after trunk
@@ -113,9 +112,6 @@ class Critic(nn.Module):
         h = self.trunk(inpt)
         h = torch.cat([h, action], dim=-1) if self.obs_type == 'pixels' else h
 
-        if self.detach_trunk_output:
-            h = h.detach()
-
         q1 = self.Q1(h)
         q2 = self.Q2(h)
 
@@ -138,7 +134,7 @@ class DDPGAgent:
                  use_tb,
                  use_wandb,
                  update_encoder,
-                 detach_trunk_output,
+                 grad_critic_params,
                  meta_dim=0):
         self.reward_free = reward_free
         self.obs_type = obs_type
@@ -153,6 +149,7 @@ class DDPGAgent:
         self.use_tb = use_tb
         self.use_wandb = use_wandb
 
+        self.grad_critic_params = grad_critic_params
         self.hidden_dim = hidden_dim
         self.lr = lr
         self.critic_target_tau = critic_target_tau
@@ -181,15 +178,19 @@ class DDPGAgent:
         self.actor = Actor(obs_type, self.obs_dim, self.action_dim,
                            feature_dim, hidden_dim).to(device)
         self.critic = Critic(obs_type, self.obs_dim, self.action_dim,
-                             feature_dim, hidden_dim, detach_trunk_output
+                             feature_dim, hidden_dim
                              ).to(device)
         self.critic_target = Critic(obs_type, self.obs_dim, self.action_dim,
-                                    feature_dim, hidden_dim, detach_trunk_output
+                                    feature_dim, hidden_dim
                                     ).to(device)
         self.critic_target.load_state_dict(self.critic.state_dict())
 
-        # optimizers
+        if self.grad_critic_params is not None:
+            for name, param in self.critic.named_parameters():
+                if not name.startswith(self.grad_critic_params):
+                    param.requires_grad = False
 
+        # optimizers
         if obs_type == 'pixels':
             self.encoder_opt = torch.optim.Adam(self.encoder.parameters(),
                                                 lr=lr)

@@ -13,13 +13,12 @@ from modules.neural_dictionary import NeuralKNN
 
 class NonParametricCritic(nn.Module):
     def __init__(self, obs_type, obs_dim, action_dim,
-                 feature_dim, hidden_dim, memory_overwrite, detach_trunk_output,
+                 feature_dim, hidden_dim, memory_overwrite,
                  value_head_cfg, device):
         super().__init__()
 
         self.obs_type = obs_type
         self.memory_overwrite = memory_overwrite
-        self.detach_trunk_output = detach_trunk_output
 
         if obs_type == 'pixels':
             # for pixels actions will be added after trunk
@@ -60,9 +59,6 @@ class NonParametricCritic(nn.Module):
                                                                dim=-1)
         h = self.trunk(inpt)
         h = torch.cat([h, action], dim=-1) if self.obs_type == 'pixels' else h
-
-        if self.detach_trunk_output:
-            h = h.detach()
 
         phis_1 = self.Q1_neck(h)
         phis_2 = self.Q2_neck(h)
@@ -117,23 +113,28 @@ class NonParametricCritic(nn.Module):
 
 class NonParamDDPGAgent(DDPGAgent):
     def __init__(self, twin_q, value_head_cfg, mc_buffer_cfg, memory_overwrite,
-                 detach_trunk_output,
                  **kwargs):
-        super().__init__(detach_trunk_output=detach_trunk_output, **kwargs)
+        super().__init__(**kwargs)
 
         self.twin_q = twin_q
 
         self.critic = NonParametricCritic(
             self.obs_type, self.obs_dim, self.action_dim, self.feature_dim,
-            self.hidden_dim, memory_overwrite, detach_trunk_output,
+            self.hidden_dim, memory_overwrite,
             value_head_cfg, self.device,
         ).to(self.device)
         self.critic_target = NonParametricCritic(
             self.obs_type, self.obs_dim, self.action_dim, self.feature_dim,
-            self.hidden_dim, memory_overwrite, detach_trunk_output,
+            self.hidden_dim, memory_overwrite,
             value_head_cfg, self.device,
         ).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
+
+        # If training only subset of parameters
+        if self.grad_critic_params is not None:
+            for name, param in self.critic.named_parameters():
+                if not name.startswith(self.grad_critic_params):
+                    param.requires_grad = False
 
         # optimizers
         self.encoder_opt = None

@@ -13,6 +13,13 @@ use_tb: ${use_tb}
 use_wandb: ${use_wandb}
 num_expl_steps: ??? # to be specified later
 
+# Loading and finetuning
+init_actor: true
+init_critic: true
+init_critic_mode: 'only_trunk'
+update_encoder: ${update_encoder}
+grad_critic_params: null
+
 lr: 1e-4
 critic_target_tau: 0.01
 update_every_steps: 2
@@ -24,13 +31,6 @@ stddev_clip: 0.3
 nstep: 3
 batch_size: 1024 # 256 for pixels
 twin_q: True
-
-# Loading and finetuning
-init_actor: true
-init_critic: true
-init_critic_mode: 'only_trunk'
-update_encoder: ${update_encoder}
-detach_trunk_output: False
 
 mc_buffer_cfg:
   capacity: 20000
