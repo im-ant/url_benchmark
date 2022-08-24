@@ -1,6 +1,8 @@
 # @package agent
-_target_: agent.proto.ProtoAgent
-name: proto
+_target_: agent.np_proto.NonParamValueProtoAgent
+_recursive_: False
+name: np_value_proto
+
 reward_free: ${reward_free}
 obs_type: ??? # to be specified later
 obs_shape: ??? # to be specified later
@@ -10,22 +12,26 @@ device: ${device}
 use_tb: ${use_tb}
 use_wandb: ${use_wandb}
 
-init_actor: True
+# Loading and finetuning
+init_actor: true
 init_critic: true
 init_critic_mode: 'only_trunk'
 update_encoder: ${update_encoder}
 grad_critic_params: null
 
+num_expl_steps: ??? # to be specified later
 lr: 1e-4
 critic_target_tau: 0.01
 update_every_steps: 2
-num_expl_steps: ??? # to be specified later
+twin_q: True
+
 hidden_dim: 1024
 feature_dim: 50
 stddev_schedule: 0.2
 stddev_clip: 0.3
 nstep: 3
 batch_size: 1024
+
 pred_dim: 128
 proj_dim: 512
 num_protos: 512
@@ -33,3 +39,19 @@ tau: 0.1
 topk: 3
 queue_size: 2048
 encoder_target_tau: 0.05
+
+critic_kwargs:
+  obs_dim: ???
+  pred_dim: ${agent.pred_dim}
+  action_dim: ???
+  capacity: ${agent.num_protos}
+  protos_dim: ${agent.pred_dim}
+  value_dim: 1
+  predictor_grad: False
+  protos_grad: False
+  values_grad: True
+  device: ${device}
+  temperature: 0.5
+  score_fn_cfg:
+    _target_: modules.neural_dictionary.CosineSimilaritySF
+    _recursive_: False
