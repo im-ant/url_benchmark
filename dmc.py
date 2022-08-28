@@ -354,7 +354,11 @@ def _make_dmc(obs_type, domain, task, frame_stack, action_repeat, seed):
 
 def make(name, obs_type, frame_stack, action_repeat, discretize_action, seed):
     assert obs_type in ['states', 'pixels']
-    domain, task = name.split('_', 1)
+    if name.startswith('point_mass_maze'):
+        domain = 'point_mass_maze'
+        _, _, _, task = name.split('_', 3)
+    else:
+        domain, task = name.split('_', 1)
     domain = dict(cup='ball_in_cup').get(domain, domain)
 
     make_fn = _make_jaco if domain == 'jaco' else _make_dmc

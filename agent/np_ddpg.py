@@ -207,8 +207,9 @@ class NonParamDDPGAgent(DDPGAgent):
             metrics['critic_q1'] = Q1.mean().item()
             metrics['critic_q2'] = Q2.mean().item()
             metrics['critic_loss'] = critic_loss.item()
-            for k in info1:
-                metrics[k] = info1[k]
+            if info1 is not None:
+                for k in info1:
+                    metrics[k] = info1[k]
 
         # optimize critic
         if self.encoder_opt is not None:

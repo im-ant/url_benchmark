@@ -40,13 +40,13 @@ class NonParametricProtoCritic(nn.Module):
         self.value_dim = value_dim
 
         # TODO: add everything to device here???
-        self.predictor = nn.Linear(obs_dim, pred_dim)  #.to(self.device)
+        self.predictor = nn.Linear(obs_dim, pred_dim)  #.to(self.device) ??
         for p in self.predictor.parameters():
             p.requires_grad = predictor_grad
 
         self.trunk = nn.Sequential(
-            nn.Linear(pred_dim + action_dim, protos_dim),
-            nn.Tanh())
+            nn.Linear(pred_dim + action_dim, protos_dim), nn.ReLU(),
+            nn.Linear(protos_dim, protos_dim))
 
         self.protos = nn.parameter.Parameter(
             torch.empty((capacity, protos_dim)),
@@ -63,7 +63,6 @@ class NonParametricProtoCritic(nn.Module):
         self.score_fn = hydra.utils.instantiate(score_fn_cfg)
 
         self.apply(utils.weight_init)  # TODO: apply better weight initialization?
-
 
     def forward(self, obs, action):
         q1, q2, info1, info2 = self.detailed_forward(obs, action)
@@ -91,6 +90,7 @@ class NonParametricProtoCritic(nn.Module):
         with torch.no_grad():
             info = {
                 'simscore_avg': scores.mean().item(),
+                'simscore_max': scores.max().item(),
                 'weights_avg': weights.mean().item(),
                 'weights_max': weights.max().item(),
                 'values_param_avg': self.values.mean().item(),
