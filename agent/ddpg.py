@@ -107,6 +107,10 @@ class Critic(nn.Module):
         self.apply(utils.weight_init)
 
     def forward(self, obs, action):
+        q1, q2, __, __ = self.detailed_forward(obs, action)
+        return q1, q2
+
+    def detailed_forward(self, obs, action):
         inpt = obs if self.obs_type == 'pixels' else torch.cat([obs, action],
                                                                dim=-1)
         h = self.trunk(inpt)
@@ -115,7 +119,7 @@ class Critic(nn.Module):
         q1 = self.Q1(h)
         q2 = self.Q2(h)
 
-        return q1, q2
+        return q1, q2, None, None
 
 
 class DDPGAgent:

@@ -17,6 +17,7 @@ class BaseSimilarityFunction(nn.Module):
     """
     NOTE: this is not used currently
     """
+
     def __init__(self):
         super().__init__()
 
@@ -26,6 +27,101 @@ class BaseSimilarityFunction(nn.Module):
         :param x2: (m, d)
         """
         return None
+
+
+class SoftNeuralDictionary(nn.Module):
+    def __init__(self, capacity, key_dim, value_dim, temperature,
+                 keys_grad, values_grad, temperature_grad, score_fn_cfg, device):
+        super().__init__()
+
+        self.device = device
+
+        self.keys = nn.parameter.Parameter(
+            torch.empty((capacity, key_dim)),
+            requires_grad=keys_grad)  # (M, key_dim)
+        self.values = nn.parameter.Parameter(
+            torch.zeros(capacity, value_dim),
+            requires_grad=values_grad)  # (M, value_dim)
+
+        self.temperature = temperature
+        self.log_temp = nn.parameter.Parameter(
+            torch.log(torch.tensor(temperature)),
+            requires_grad=temperature_grad)
+
+        self.score_fn = hydra.utils.instantiate(score_fn_cfg).to(device)
+
+    def forward(self, x):
+        vs, info = self.detailed_forward(x)
+        return vs
+
+    def detailed_forward(self, x):
+        """
+        :param x: input, shape (B, key_dim)
+        :return:
+        """
+        # Compute similarity and softmax
+        scores = self.score_fn(x, self.keys)  # (B, M)
+        ws = scores / torch.exp(self.log_temp)
+        log_weights = ws - torch.logsumexp(ws, axis=1, keepdim=True)  # (B, M)
+        weights = torch.exp(log_weights)
+
+        # Combine with value entries to get state-action value estimates
+        vs = torch.matmul(weights, self.values)  # (B, val_dim)
+
+        with torch.no_grad():
+            info = {
+                'simscore_avg': scores.mean().item(),
+                'simscore_max': scores.max().item(),  # TODO: need to be max over data dimension
+                'weights_avg': weights.mean().item(),
+                'weights_max': weights.max().item(),
+                'values_param_avg': self.values.mean().item(),
+                'values_param_min': self.values.min().item(),
+                'values_param_max': self.values.max().item(),
+            }
+
+        return vs, info
+
+
+class NonParametricProtoActor(nn.Module):
+    def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
+                 key_dim, snd_kwargs, device):
+        super().__init__()
+
+        # feature_dim = feature_dim if obs_type == 'pixels' else hidden_dim
+
+        # TODO: alternatively just use a single projector to get to the actor??
+
+        self.trunk = nn.Sequential(nn.Linear(obs_dim, feature_dim),
+                                   nn.LayerNorm(feature_dim), nn.Tanh())
+
+        policy_layers = []
+        policy_layers += [
+            nn.Linear(feature_dim, hidden_dim), nn.ReLU(inplace=True),
+        ]
+        # NOTE: not using this for now because using non-parametric instead
+        # add additional hidden layer for pixels
+        # if obs_type == 'pixels':
+        #    policy_layers += [
+        #        nn.Linear(hidden_dim, hidden_dim), nn.ReLU(inplace=True)
+        #    ]
+        policy_layers += [nn.Linear(hidden_dim, key_dim)]
+        self.policy_neck = nn.Sequential(*policy_layers)
+
+        snd_kwargs.value_dim = action_dim
+        self.policy_head = SoftNeuralDictionary(**snd_kwargs).to(device)
+
+        self.apply(utils.weight_init)
+
+    def forward(self, obs, std):
+        h = self.trunk(obs)
+        phi = self.policy_neck(h)
+        mu = self.policy_head(phi)
+
+        mu = torch.tanh(mu)
+        std = torch.ones_like(mu) * std
+
+        dist = utils.TruncatedNormal(mu, std)
+        return dist
 
 
 class NonParametricProtoCritic(nn.Module):
@@ -40,13 +136,15 @@ class NonParametricProtoCritic(nn.Module):
         self.value_dim = value_dim
 
         # TODO: add everything to device here???
-        self.predictor = nn.Linear(obs_dim, pred_dim)  #.to(self.device) ??
+        self.predictor = nn.Linear(obs_dim, pred_dim)  # .to(self.device) ??
         for p in self.predictor.parameters():
             p.requires_grad = predictor_grad
 
         self.trunk = nn.Sequential(
             nn.Linear(pred_dim + action_dim, protos_dim), nn.ReLU(),
             nn.Linear(protos_dim, protos_dim))
+
+        # TODO: use the soft neural dictionary class intiailization isntead of manually below
 
         self.protos = nn.parameter.Parameter(
             torch.empty((capacity, protos_dim)),
@@ -90,7 +188,7 @@ class NonParametricProtoCritic(nn.Module):
         with torch.no_grad():
             info = {
                 'simscore_avg': scores.mean().item(),
-                'simscore_max': scores.max().item(),
+                'simscore_max': scores.max().item(),  # TODO: need to be max over data dimension
                 'weights_avg': weights.mean().item(),
                 'weights_max': weights.max().item(),
                 'values_param_avg': self.values.mean().item(),
@@ -102,18 +200,22 @@ class NonParametricProtoCritic(nn.Module):
 
 
 class NonParamValueProtoAgent(ProtoAgent):
-    def __init__(self, twin_q, critic_kwargs, **kwargs):
+    def __init__(self, twin_q, actor_cfg, **kwargs):
         super().__init__(**kwargs)
 
         self.twin_q = twin_q
         self.protos = None  # Set to None so there is no confusion
 
-        critic_kwargs.obs_dim = self.obs_dim
-        critic_kwargs.action_dim = self.action_dim
-        self.critic = NonParametricProtoCritic(**critic_kwargs).to(self.device)
-        self.critic_target = NonParametricProtoCritic(
-            **critic_kwargs).to(self.device)
-        self.critic_target.load_state_dict(self.critic.state_dict())
+        # Initialize actor
+        actor_cfg.obs_type = self.obs_type
+        actor_cfg.obs_dim = self.obs_dim
+        actor_cfg.action_dim = self.action_dim
+        self.actor = hydra.utils.instantiate(actor_cfg).to(self.device)
+
+        # Initialize critic
+        # TODO: currently initialized in parent for non-parametric critic, but need
+        #       to re-add the lines here to initialize the critic to use nonparam
+        #       critic and nonparam actor
 
         # optimizers
         self.proto_opt = torch.optim.Adam(utils.chain(
@@ -121,6 +223,7 @@ class NonParamValueProtoAgent(ProtoAgent):
             self.projector.parameters()),
             lr=self.lr)  # TODO: name this better
 
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=self.lr)
         self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=self.lr)
 
         self.train()
@@ -130,20 +233,28 @@ class NonParamValueProtoAgent(ProtoAgent):
     def init_from(self, other):
         # Regular initialization similar to base proto
         utils.hard_update_params(other.encoder, self.encoder)
-        if self.init_actor:
-            utils.hard_update_params(other.actor, self.actor)
 
         utils.hard_update_params(other.predictor, self.predictor)
         utils.hard_update_params(other.projector, self.projector)
 
+        if self.init_actor:
+            if type(self.actor) == NonParametricProtoActor:
+                # TODO: change actor and initialize the predictor?
+                # self.actor.predictor.weight.data.copy_(other.predictor.weight.data)
+                self.actor.policy_head.keys.data.copy_(other.protos.weight.data)
+            else:
+                utils.hard_update_params(other.actor, self.actor)
+
         if self.init_critic:
-            # Initialize from a pre-trained proto agent
-            if type(other) == ProtoAgent:
+            if type(self.critic) == NonParametricProtoCritic:
                 self.critic.predictor.weight.data.copy_(other.predictor.weight.data)
                 self.critic.protos.data.copy_(other.protos.weight.data)
-            # ??
             else:
-                raise NotImplementedError
+                if self.init_critic_mode == 'only_trunk':
+                    utils.hard_update_params(other.critic.trunk, self.critic.trunk)
+                else:
+                    raise NotImplementedError
+                self.critic_target.load_state_dict(self.critic.state_dict())
 
     def update_critic(self, obs, action, reward, discount, next_obs, step):
         metrics = dict()
@@ -170,8 +281,9 @@ class NonParamValueProtoAgent(ProtoAgent):
             metrics['critic_q1'] = Q1.mean().item()
             metrics['critic_q2'] = Q2.mean().item()
             metrics['critic_loss'] = critic_loss.item()
-            for k in info1:
-                metrics[k] = info1[k]
+            if info1 is not None:
+                for k in info1:
+                    metrics[k] = info1[k]
 
         # optimize critic
         if self.encoder_opt is not None:
@@ -186,7 +298,7 @@ class NonParamValueProtoAgent(ProtoAgent):
 
     def update(self, replay_iter, step):
         metrics = dict()
-        #import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
 
         if step % self.update_every_steps != 0:
             return metrics
