@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import utils
-from agent.np_proto import *
+# from agent.np_proto import SoftNeuralDictionary
 
 
 class ParametricProjectedCritic(nn.Module):
@@ -58,3 +58,74 @@ class ParametricProjectedCritic(nn.Module):
         qs = self.critic_head(h)  # qs: (B, 1)
 
         return qs, qs, None, None  # TODO: very hacky right now, implement twin Q later
+
+
+class NonParametricProtoActor(nn.Module):
+    def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
+                 key_dim, snd_kwargs, device):
+        super().__init__()
+
+        # feature_dim = feature_dim if obs_type == 'pixels' else hidden_dim
+
+        # TODO: alternatively just use a single projector to get to the actor??
+
+        self.trunk = nn.Sequential(nn.Linear(obs_dim, feature_dim),
+                                   nn.LayerNorm(feature_dim), nn.Tanh())
+
+        policy_layers = []
+        policy_layers += [
+            nn.Linear(feature_dim, hidden_dim), nn.ReLU(inplace=True),
+        ]
+        # NOTE: not using this for now because using non-parametric instead
+        # add additional hidden layer for pixels
+        # if obs_type == 'pixels':
+        #    policy_layers += [
+        #        nn.Linear(hidden_dim, hidden_dim), nn.ReLU(inplace=True)
+        #    ]
+        policy_layers += [nn.Linear(hidden_dim, key_dim)]
+        self.policy_neck = nn.Sequential(*policy_layers)
+
+        snd_kwargs.value_dim = action_dim
+        self.policy_head = SoftNeuralDictionary(**snd_kwargs).to(device)
+
+        self.apply(utils.weight_init)
+
+    def forward(self, obs, std):
+        h = self.trunk(obs)
+        phi = self.policy_neck(h)
+        mu = self.policy_head(phi)
+
+        mu = torch.tanh(mu)
+        std = torch.ones_like(mu) * std
+
+        dist = utils.TruncatedNormal(mu, std)
+        return dist
+
+class NonParametricProjectedActor(nn.Module):
+    def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
+                 key_dim, predictor_grad, snd_kwargs, device):
+        super().__init__()
+
+        self.key_dim = key_dim
+
+        # TODO: add everything to device here???
+        self.predictor = nn.Linear(obs_dim, key_dim)  # .to(self.device) ??
+        for p in self.predictor.parameters():
+            p.requires_grad = predictor_grad
+
+        snd_kwargs.value_dim = action_dim
+        self.policy_head = SoftNeuralDictionary(**snd_kwargs).to(device)
+
+        self.apply(utils.weight_init)
+
+    def forward(self, obs, std):
+        h = self.predictor(obs)
+        mu = self.policy_head(h)
+
+        mu = torch.tanh(mu)
+        std = torch.ones_like(mu) * std
+
+        dist = utils.TruncatedNormal(mu, std)
+        return dist
+
+

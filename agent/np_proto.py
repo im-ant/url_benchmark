@@ -83,30 +83,17 @@ class SoftNeuralDictionary(nn.Module):
         return vs, info
 
 
-class NonParametricProtoActor(nn.Module):
+class NonParametricProjectedActor(nn.Module):
     def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
-                 key_dim, snd_kwargs, device):
+                 key_dim, predictor_grad, snd_kwargs, device):
         super().__init__()
 
-        # feature_dim = feature_dim if obs_type == 'pixels' else hidden_dim
+        self.key_dim = key_dim
 
-        # TODO: alternatively just use a single projector to get to the actor??
-
-        self.trunk = nn.Sequential(nn.Linear(obs_dim, feature_dim),
-                                   nn.LayerNorm(feature_dim), nn.Tanh())
-
-        policy_layers = []
-        policy_layers += [
-            nn.Linear(feature_dim, hidden_dim), nn.ReLU(inplace=True),
-        ]
-        # NOTE: not using this for now because using non-parametric instead
-        # add additional hidden layer for pixels
-        # if obs_type == 'pixels':
-        #    policy_layers += [
-        #        nn.Linear(hidden_dim, hidden_dim), nn.ReLU(inplace=True)
-        #    ]
-        policy_layers += [nn.Linear(hidden_dim, key_dim)]
-        self.policy_neck = nn.Sequential(*policy_layers)
+        # TODO: add everything to device here???
+        self.predictor = nn.Linear(obs_dim, key_dim)  # .to(self.device) ??
+        for p in self.predictor.parameters():
+            p.requires_grad = predictor_grad
 
         snd_kwargs.value_dim = action_dim
         self.policy_head = SoftNeuralDictionary(**snd_kwargs).to(device)
@@ -114,9 +101,8 @@ class NonParametricProtoActor(nn.Module):
         self.apply(utils.weight_init)
 
     def forward(self, obs, std):
-        h = self.trunk(obs)
-        phi = self.policy_neck(h)
-        mu = self.policy_head(phi)
+        h = self.predictor(obs)
+        mu = self.policy_head(h)
 
         mu = torch.tanh(mu)
         std = torch.ones_like(mu) * std
@@ -211,9 +197,10 @@ class NonParamValueProtoAgent(ProtoAgent):
         utils.hard_update_params(other.projector, self.projector)
 
         if self.init_actor:
-            if type(self.actor) == NonParametricProtoActor:
-                # TODO: change actor and initialize the predictor?
-                # self.actor.predictor.weight.data.copy_(other.predictor.weight.data)
+            if type(self.actor) == NonParametricProjectedActor:
+                self.actor.predictor.weight.data.copy_(other.predictor.weight.data)
+                self.actor.policy_head.keys.data.copy_(other.protos.weight.data)
+            elif type(self.actor) == NonParametricProtoActor:
                 self.actor.policy_head.keys.data.copy_(other.protos.weight.data)
             else:
                 utils.hard_update_params(other.actor, self.actor)
