@@ -11,6 +11,7 @@ from torch import jit
 import utils
 from agent.ddpg import DDPGAgent
 from agent.proto import ProtoAgent
+from agent.np_proto_modules import *
 
 
 class BaseSimilarityFunction(nn.Module):
@@ -125,40 +126,23 @@ class NonParametricProtoActor(nn.Module):
 
 
 class NonParametricProtoCritic(nn.Module):
-    def __init__(self, obs_dim, pred_dim, action_dim, capacity,
-                 protos_dim, value_dim, predictor_grad, protos_grad, values_grad,
-                 temperature, score_fn_cfg,
-                 device):
+    def __init__(self, obs_type, obs_dim, action_dim,
+                 pred_dim, key_dim, predictor_grad,
+                 snd_kwargs, device):
         super().__init__()
 
-        self.capacity = capacity
-        self.protos_dim = protos_dim
-        self.value_dim = value_dim
+        self.key_dim = key_dim
 
         # TODO: add everything to device here???
-        self.predictor = nn.Linear(obs_dim, pred_dim)  # .to(self.device) ??
+        self.predictor = nn.Linear(obs_dim, key_dim)  # .to(self.device) ??
         for p in self.predictor.parameters():
             p.requires_grad = predictor_grad
 
         self.trunk = nn.Sequential(
-            nn.Linear(pred_dim + action_dim, protos_dim), nn.ReLU(),
-            nn.Linear(protos_dim, protos_dim))
+            nn.Linear(pred_dim + action_dim, key_dim), nn.ReLU(),
+            nn.Linear(key_dim, key_dim))
 
-        # TODO: use the soft neural dictionary class intiailization isntead of manually below
-
-        self.protos = nn.parameter.Parameter(
-            torch.empty((capacity, protos_dim)),
-            requires_grad=protos_grad)
-        self.values = nn.parameter.Parameter(
-            torch.zeros(capacity, value_dim),
-            requires_grad=values_grad)
-
-        # TODO: initialize similarity function
-        self.temperature = temperature
-        self.log_temp = nn.parameter.Parameter(
-            torch.log(torch.tensor(temperature)),
-            requires_grad=False)
-        self.score_fn = hydra.utils.instantiate(score_fn_cfg)
+        self.critic_head = SoftNeuralDictionary(**snd_kwargs).to(device)
 
         self.apply(utils.weight_init)  # TODO: apply better weight initialization?
 
@@ -175,32 +159,13 @@ class NonParametricProtoCritic(nn.Module):
         h = torch.cat([inpt, action], dim=-1)
         h = self.trunk(h)  # (B, key_dim)
 
-        # Compute similarity and softmax
-        # TODO: probably move this to a separate class for computing similarity function
-        scores = self.score_fn(h, self.protos)  # (B, M)
-        ws = scores / torch.exp(self.log_temp)
-        log_weights = ws - torch.logsumexp(ws, axis=1, keepdim=True)  # (B, M)
-        weights = torch.exp(log_weights)
-
-        # Combine with value entries to get state-action value estimates
-        qs = torch.matmul(weights, self.values)  # (B, val_dim)
-
-        with torch.no_grad():
-            info = {
-                'simscore_avg': scores.mean().item(),
-                'simscore_max': scores.max().item(),  # TODO: need to be max over data dimension
-                'weights_avg': weights.mean().item(),
-                'weights_max': weights.max().item(),
-                'values_param_avg': self.values.mean().item(),
-                'values_param_min': self.values.min().item(),
-                'values_param_max': self.values.max().item(),
-            }
+        qs, info = self.critic_head.detailed_forward(h)   # qs: (B, 1)
 
         return qs, qs, info, None  # TODO: very hacky right now, implement twin Q later
 
 
 class NonParamValueProtoAgent(ProtoAgent):
-    def __init__(self, twin_q, actor_cfg, **kwargs):
+    def __init__(self, twin_q, actor_cfg, critic_cfg, **kwargs):
         super().__init__(**kwargs)
 
         self.twin_q = twin_q
@@ -213,9 +178,17 @@ class NonParamValueProtoAgent(ProtoAgent):
         self.actor = hydra.utils.instantiate(actor_cfg).to(self.device)
 
         # Initialize critic
-        # TODO: currently initialized in parent for non-parametric critic, but need
-        #       to re-add the lines here to initialize the critic to use nonparam
-        #       critic and nonparam actor
+        critic_cfg.obs_type = self.obs_type
+        critic_cfg.obs_dim = self.obs_dim
+        critic_cfg.action_dim = self.action_dim
+        self.critic = hydra.utils.instantiate(critic_cfg).to(self.device)
+        self.critic_target = hydra.utils.instantiate(critic_cfg).to(self.device)
+        self.critic_target.load_state_dict(self.critic.state_dict())
+
+        if self.grad_critic_params is not None:
+            for name, param in self.critic.named_parameters():
+                if not name.startswith(self.grad_critic_params):
+                    param.requires_grad = False
 
         # optimizers
         self.proto_opt = torch.optim.Adam(utils.chain(
@@ -248,7 +221,9 @@ class NonParamValueProtoAgent(ProtoAgent):
         if self.init_critic:
             if type(self.critic) == NonParametricProtoCritic:
                 self.critic.predictor.weight.data.copy_(other.predictor.weight.data)
-                self.critic.protos.data.copy_(other.protos.weight.data)
+                self.critic.critic_head.keys.data.copy_(other.protos.weight.data)
+            elif type(self.critic) == ParametricProjectedCritic:  # ablation
+                self.critic.predictor.weight.data.copy_(other.predictor.weight.data)
             else:
                 if self.init_critic_mode == 'only_trunk':
                     utils.hard_update_params(other.critic.trunk, self.critic.trunk)

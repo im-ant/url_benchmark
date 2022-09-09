@@ -12,7 +12,7 @@ device: ${device}
 use_tb: ${use_tb}
 use_wandb: ${use_wandb}
 
-# Loading and finetuning
+# Loading and fine-tuning
 init_actor: true
 init_critic: true
 init_critic_mode: 'only_trunk'
@@ -41,15 +41,33 @@ queue_size: 2048
 encoder_target_tau: 0.05
 
 actor_cfg:
-  _target_: null
+  _target_: agent.np_proto.NonParametricProtoActor
   _recursive_: False
   obs_type: ???
   obs_dim: ???
   action_dim: ???
+  device: ${device}
+  feature_dim: ${agent.feature_dim}
+  hidden_dim: ${agent.hidden_dim}
+  key_dim: ${agent.pred_dim}
+  snd_kwargs:
+    capacity: ${agent.num_protos}
+    key_dim: ${agent.pred_dim}  # prototype dimensions
+    value_dim: ???
+    temperature: 0.1
+    keys_grad: False
+    values_grad: True
+    temperature_grad: False
+    device: ${device}
+    score_fn_cfg:
+      _target_: modules.neural_dictionary.CosineSimilaritySF
+      _recursive_: False
 
 critic_cfg:
-  _target_: null
+  _target_: agent.ddpg.Critic
   _recursive_: False
   obs_type: ???
   obs_dim: ???
   action_dim: ???
+  feature_dim: ${agent.feature_dim}
+  hidden_dim: ${agent.hidden_dim}

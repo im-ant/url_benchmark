@@ -41,19 +41,28 @@ queue_size: 2048
 encoder_target_tau: 0.05
 
 actor_cfg:
-  _target_: agent.np_proto.NonParametricProtoActor
+  _target_: agent.ddpg.Actor
+  _recursive_: False
+  obs_type: ???
+  obs_dim: ???
+  action_dim: ???
+  feature_dim: ${agent.feature_dim}
+  hidden_dim: ${agent.hidden_dim}
+
+critic_cfg:
+  _target_: agent.np_proto.NonParametricProtoCritic
   _recursive_: False
   obs_type: ???
   obs_dim: ???
   action_dim: ???
   device: ${device}
-  feature_dim: ${agent.feature_dim}
-  hidden_dim: ${agent.hidden_dim}
-  key_dim: ${agent.pred_dim}
+  pred_dim: ${agent.pred_dim}
+  key_dim:  ${agent.pred_dim}
+  predictor_grad: False
   snd_kwargs:
     capacity: ${agent.num_protos}
     key_dim: ${agent.pred_dim}  # prototype dimensions
-    value_dim: ???
+    value_dim: 1
     temperature: 0.1
     keys_grad: False
     values_grad: True
@@ -62,4 +71,3 @@ actor_cfg:
     score_fn_cfg:
       _target_: modules.neural_dictionary.CosineSimilaritySF
       _recursive_: False
-
