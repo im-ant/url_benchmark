@@ -67,6 +67,7 @@ critic_cfg:
     keys_grad: False
     values_grad: True
     temperature_grad: False
+    values_init: null
     device: ${device}
     score_fn_cfg:
       _target_: modules.neural_dictionary.CosineSimilaritySF

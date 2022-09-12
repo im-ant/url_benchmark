@@ -30,59 +30,6 @@ class BaseSimilarityFunction(nn.Module):
         return None
 
 
-class SoftNeuralDictionary(nn.Module):
-    def __init__(self, capacity, key_dim, value_dim, temperature,
-                 keys_grad, values_grad, temperature_grad, score_fn_cfg, device):
-        super().__init__()
-
-        self.device = device
-
-        self.keys = nn.parameter.Parameter(
-            torch.empty((capacity, key_dim)),
-            requires_grad=keys_grad)  # (M, key_dim)
-        self.values = nn.parameter.Parameter(
-            torch.zeros(capacity, value_dim),
-            requires_grad=values_grad)  # (M, value_dim)
-
-        self.temperature = temperature
-        self.log_temp = nn.parameter.Parameter(
-            torch.log(torch.tensor(temperature)),
-            requires_grad=temperature_grad)
-
-        self.score_fn = hydra.utils.instantiate(score_fn_cfg).to(device)
-
-    def forward(self, x):
-        vs, info = self.detailed_forward(x)
-        return vs
-
-    def detailed_forward(self, x):
-        """
-        :param x: input, shape (B, key_dim)
-        :return:
-        """
-        # Compute similarity and softmax
-        scores = self.score_fn(x, self.keys)  # (B, M)
-        ws = scores / torch.exp(self.log_temp)
-        log_weights = ws - torch.logsumexp(ws, axis=1, keepdim=True)  # (B, M)
-        weights = torch.exp(log_weights)
-
-        # Combine with value entries to get state-action value estimates
-        vs = torch.matmul(weights, self.values)  # (B, val_dim)
-
-        with torch.no_grad():
-            info = {
-                'simscore_avg': scores.mean().item(),
-                'simscore_max': scores.max().item(),  # TODO: need to be max over data dimension
-                'weights_avg': weights.mean().item(),
-                'weights_max': weights.max().item(),
-                'values_param_avg': self.values.mean().item(),
-                'values_param_min': self.values.min().item(),
-                'values_param_max': self.values.max().item(),
-            }
-
-        return vs, info
-
-
 class NonParametricProjectedActor(nn.Module):
     def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
                  key_dim, predictor_grad, snd_kwargs, device):

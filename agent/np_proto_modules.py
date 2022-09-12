@@ -1,6 +1,7 @@
 # ==========
 # Modules the np_proto class of models, including ablations
 # ==========
+import hydra
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,6 +9,66 @@ import torch.nn.functional as F
 
 import utils
 # from agent.np_proto import SoftNeuralDictionary
+
+
+class SoftNeuralDictionary(nn.Module):
+    def __init__(self, capacity, key_dim, value_dim, temperature,
+                 keys_grad, values_grad, temperature_grad, values_init,
+                 score_fn_cfg, device):
+        super().__init__()
+
+        self.device = device
+
+        self.keys = nn.parameter.Parameter(
+            torch.empty((capacity, key_dim)),
+            requires_grad=keys_grad)  # (M, key_dim)
+        self.values = nn.parameter.Parameter(
+            torch.zeros(capacity, value_dim),
+            requires_grad=values_grad)  # (M, value_dim)
+
+        self.temperature = temperature
+        self.log_temp = nn.parameter.Parameter(
+            torch.log(torch.tensor(temperature)),
+            requires_grad=temperature_grad)
+
+        self.score_fn = hydra.utils.instantiate(score_fn_cfg).to(device)
+
+        # Init
+        if isinstance(values_init, float):
+            nn.init.constant_(self.values, values_init)
+
+
+    def forward(self, x):
+        vs, info = self.detailed_forward(x)
+        return vs
+
+    def detailed_forward(self, x):
+        """
+        :param x: input, shape (B, key_dim)
+        :return:
+        """
+        # Compute similarity and softmax
+        scores = self.score_fn(x, self.keys)  # (B, M)
+        ws = scores / torch.exp(self.log_temp)
+        log_weights = ws - torch.logsumexp(ws, axis=1, keepdim=True)  # (B, M)
+        weights = torch.exp(log_weights)
+
+        # Combine with value entries to get state-action value estimates
+        vs = torch.matmul(weights, self.values)  # (B, val_dim)
+
+        with torch.no_grad():
+            info = {
+                'simscore_avg': scores.mean().item(),
+                'simscore_max': scores.max(dim=1).values.mean().item(),
+                'weights_avg': weights.mean().item(),
+                'weights_max': weights.max(dim=1).values.mean().item(),
+                'values_param_avg': self.values.mean().item(),
+                'values_param_min': self.values.min().item(),
+                'values_param_max': self.values.max().item(),
+            }
+
+        return vs, info
+
 
 
 class ParametricProjectedCritic(nn.Module):
@@ -100,32 +161,3 @@ class NonParametricProtoActor(nn.Module):
 
         dist = utils.TruncatedNormal(mu, std)
         return dist
-
-class NonParametricProjectedActor(nn.Module):
-    def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
-                 key_dim, predictor_grad, snd_kwargs, device):
-        super().__init__()
-
-        self.key_dim = key_dim
-
-        # TODO: add everything to device here???
-        self.predictor = nn.Linear(obs_dim, key_dim)  # .to(self.device) ??
-        for p in self.predictor.parameters():
-            p.requires_grad = predictor_grad
-
-        snd_kwargs.value_dim = action_dim
-        self.policy_head = SoftNeuralDictionary(**snd_kwargs).to(device)
-
-        self.apply(utils.weight_init)
-
-    def forward(self, obs, std):
-        h = self.predictor(obs)
-        mu = self.policy_head(h)
-
-        mu = torch.tanh(mu)
-        std = torch.ones_like(mu) * std
-
-        dist = utils.TruncatedNormal(mu, std)
-        return dist
-
-
