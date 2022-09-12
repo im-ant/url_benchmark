@@ -54,10 +54,10 @@ class Workspace:
         # create envs
         self.train_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
                                   cfg.action_repeat, cfg.discretize_action,
-                                  cfg.seed)
+                                  cfg.train_env_seed)
         self.eval_env = dmc.make(cfg.task, cfg.obs_type, cfg.frame_stack,
                                  cfg.action_repeat, cfg.discretize_action,
-                                 cfg.seed)
+                                 cfg.eval_env_seed)  # TODO: should use different seed than train
 
         # create agent
         print('Initializing agent...')

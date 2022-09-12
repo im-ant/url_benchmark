@@ -38,6 +38,8 @@ nstep: ${agent.nstep}
 update_encoder: false # can be either true or false depending if we want to fine-tune encoder
 # misc
 seed: 1
+train_env_seed: ${seed}
+eval_env_seed: ${seed}
 device: cuda
 save_video: true
 save_train_video: false

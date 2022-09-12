@@ -79,6 +79,7 @@ class NonParametricProtoCritic(nn.Module):
 
         self.apply(utils.weight_init)  # TODO: apply better weight initialization?
 
+
     def forward(self, obs, action):
         q1, q2, info1, info2 = self.detailed_forward(obs, action)
         return q1, q2
@@ -202,6 +203,38 @@ class NonParamValueProtoAgent(ProtoAgent):
         self.critic_opt.step()
         if self.encoder_opt is not None:
             self.encoder_opt.step()
+
+        return metrics
+
+    def update_actor(self, obs, step):
+        metrics = dict()
+
+        stddev = utils.schedule(self.stddev_schedule, step)
+        dist = self.actor(obs, stddev)
+        action = dist.sample(clip=self.stddev_clip)
+        log_prob = dist.log_prob(action).sum(-1, keepdim=True)
+        Q1, Q2 = self.critic(obs, action)
+        Q = torch.min(Q1, Q2)
+
+        actor_loss = -Q.mean()
+
+        # optimize actor
+        self.actor_opt.zero_grad(set_to_none=True)
+        actor_loss.backward()
+        self.actor_opt.step()
+
+        # Get actor gradient norm if available
+        # https://pytorch.org/docs/stable/_modules/torch/nn/utils/clip_grad.html#clip_grad_norm_
+        actor_grads = [torch.norm(p.grad.detach(), 2)
+                       for p in self.actor.parameters() if p.grad is not None]
+        actor_gradnorm = torch.norm(torch.stack(actor_grads), 2)
+
+
+        if self.use_tb or self.use_wandb:
+            metrics['actor_loss'] = actor_loss.item()
+            metrics['actor_logprob'] = log_prob.mean().item()
+            metrics['actor_ent'] = dist.entropy().sum(dim=-1).mean().item()
+            metrics['actor_grad_norm'] = actor_gradnorm.item()
 
         return metrics
 
