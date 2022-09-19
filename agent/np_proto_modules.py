@@ -8,7 +8,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import utils
-# from agent.np_proto import SoftNeuralDictionary
+
+
+def torch_entropy(X):
+    """
+    Compute entropy of a vector
+        H(X) = - sum_{x in X} p(x) log p(x)
+
+    If the input is a matrix, entropy of each row vector is computed
+    """
+    if X.dim() > 1:
+        prod = X * torch.log(X)  # n x d
+        ent = -prod.sum(dim=1)
+    else:
+        ent = -torch.dot(X, torch.log(X))
+    return ent
 
 
 class SoftNeuralDictionary(nn.Module):
@@ -57,6 +71,14 @@ class SoftNeuralDictionary(nn.Module):
         vs = torch.matmul(weights, self.values)  # (B, val_dim)
 
         with torch.no_grad():
+            # Measure things
+            ent_avg_batch = torch_entropy(weights.mean(dim=0)).item()
+            ent_item_batch_avg = torch_entropy(weights).mean().item()
+
+            onehot_maxw = F.one_hot(weights.max(dim=1).indices,
+                                    num_classes=weights.size(1))
+            ncol_max_in_batch = torch.sum(onehot_maxw.sum(dim=0) >= 1.)
+
             info = {
                 'simscore_avg': scores.mean().item(),
                 'simscore_max': scores.max(dim=1).values.mean().item(),
@@ -65,6 +87,9 @@ class SoftNeuralDictionary(nn.Module):
                 'values_param_avg': self.values.mean().item(),
                 'values_param_min': self.values.min().item(),
                 'values_param_max': self.values.max().item(),
+                'entropy_avg_batch': ent_avg_batch,
+                'entropy_item_batch_avg': ent_item_batch_avg,
+                'prop_col_max_in_batch': (ncol_max_in_batch/weights.size(0)).item(),
             }
 
         return vs, info
@@ -152,12 +177,16 @@ class NonParametricProtoActor(nn.Module):
         self.apply(utils.weight_init)
 
     def forward(self, obs, std):
+        dist, info = self.detailed_forward(obs,std)
+        return dist
+
+    def detailed_forward(self, obs, std):
         h = self.trunk(obs)
         phi = self.policy_neck(h)
-        mu = self.policy_head(phi)
+        mu, info = self.policy_head.detailed_forward(phi)
 
         mu = torch.tanh(mu)
         std = torch.ones_like(mu) * std
 
         dist = utils.TruncatedNormal(mu, std)
-        return dist
+        return dist, info

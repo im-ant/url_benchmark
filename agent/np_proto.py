@@ -48,14 +48,18 @@ class NonParametricProjectedActor(nn.Module):
         self.apply(utils.weight_init)
 
     def forward(self, obs, std):
+        dist, __ = self.detailed_forward(obs, std)
+        return dist
+
+    def detailed_forward(self, obs, std):
         h = self.predictor(obs)
-        mu = self.policy_head(h)
+        mu, info = self.policy_head.detailed_forward(h)
 
         mu = torch.tanh(mu)
         std = torch.ones_like(mu) * std
 
         dist = utils.TruncatedNormal(mu, std)
-        return dist
+        return dist, info
 
 
 class NonParametricProtoCritic(nn.Module):
@@ -193,7 +197,7 @@ class NonParamValueProtoAgent(ProtoAgent):
             metrics['critic_loss'] = critic_loss.item()
             if info1 is not None:
                 for k in info1:
-                    metrics[k] = info1[k]
+                    metrics[f'critic_{k}'] = info1[k]
 
         # optimize critic
         if self.encoder_opt is not None:
@@ -210,7 +214,7 @@ class NonParamValueProtoAgent(ProtoAgent):
         metrics = dict()
 
         stddev = utils.schedule(self.stddev_schedule, step)
-        dist = self.actor(obs, stddev)
+        dist, info = self.actor.detailed_forward(obs, stddev)
         action = dist.sample(clip=self.stddev_clip)
         log_prob = dist.log_prob(action).sum(-1, keepdim=True)
         Q1, Q2 = self.critic(obs, action)
@@ -235,6 +239,10 @@ class NonParamValueProtoAgent(ProtoAgent):
             metrics['actor_logprob'] = log_prob.mean().item()
             metrics['actor_ent'] = dist.entropy().sum(dim=-1).mean().item()
             metrics['actor_grad_norm'] = actor_gradnorm.item()
+
+            if info is not None:
+                for k in info:
+                    metrics[f'actor_{k}'] = info[k]
 
         return metrics
 

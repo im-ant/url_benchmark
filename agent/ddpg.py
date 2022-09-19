@@ -58,6 +58,10 @@ class Actor(nn.Module):
         self.apply(utils.weight_init)
 
     def forward(self, obs, std):
+        dist, __ = self.detailed_forward(obs, std)
+        return dist
+
+    def detailed_forward(self, obs, std):
         h = self.trunk(obs)
 
         mu = self.policy(h)
@@ -65,7 +69,7 @@ class Actor(nn.Module):
         std = torch.ones_like(mu) * std
 
         dist = utils.TruncatedNormal(mu, std)
-        return dist
+        return dist, None
 
 
 class Critic(nn.Module):
