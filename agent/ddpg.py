@@ -129,7 +129,7 @@ class Critic(nn.Module):
 class DDPGAgent:
     def __init__(self, name, reward_free, obs_type, obs_shape, action_shape,
                  device, init_actor, init_critic, init_critic_mode,
-                 lr,
+                 lr, actor_lr, critic_lr,
                  feature_dim,
                  hidden_dim,
                  critic_target_tau,
@@ -160,6 +160,8 @@ class DDPGAgent:
         self.grad_critic_params = grad_critic_params
         self.hidden_dim = hidden_dim
         self.lr = lr
+        self.actor_lr = actor_lr
+        self.critic_lr = critic_lr
         self.critic_target_tau = critic_target_tau
         self.update_every_steps = update_every_steps
         self.num_expl_steps = num_expl_steps
@@ -204,8 +206,8 @@ class DDPGAgent:
                                                 lr=lr)
         else:
             self.encoder_opt = None
-        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=lr)
-        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=lr)
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
 
         self.train()
         self.critic_target.train()

@@ -134,8 +134,10 @@ class NonParamValueProtoAgent(ProtoAgent):
             self.projector.parameters()),
             lr=self.lr)  # TODO: name this better
 
-        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=self.lr)
-        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=self.lr)
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(),
+                                          lr=self.actor_lr)
+        self.critic_opt = torch.optim.Adam(self.critic.parameters(),
+                                           lr=self.critic_lr)
 
         self.train()
         # TODO: why not critic.train() and only critic_target.train()????
