@@ -74,6 +74,9 @@ class Workspace:
             self.agent.init_from(pretrained_agent)
             print('Loaded snapshop agent', pretrained_agent)
 
+        # optional additional initialization for the agent
+        self.agent.optional_inits()
+
         # get meta specs
         meta_specs = self.agent.get_meta_specs()
         # create replay buffer

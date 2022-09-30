@@ -63,7 +63,7 @@ class ProtoAgent(DDPGAgent):
         self.projector = Projector(pred_dim, proj_dim).to(self.device)
         self.projector.apply(utils.weight_init)
 
-        # prototypes
+        # prototypess
         self.protos = nn.Linear(pred_dim, num_protos,
                                 bias=False).to(self.device)
         self.protos.apply(utils.weight_init)

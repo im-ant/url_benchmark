@@ -47,7 +47,17 @@ class SoftNeuralDictionary(nn.Module):
 
         self.score_fn = hydra.utils.instantiate(score_fn_cfg).to(device)
 
-        # Init
+        # Initialize keys to be orthonormal matrix
+        # TODO: make customizable, or, init to unit vectors randomly sampled in
+        #       d-dimensional space
+        key_init_scheme = 'orthonormal'
+        if key_init_scheme == 'orthonormal':
+            nn.init.orthogonal_(self.keys)
+            C = self.keys.data.clone()
+            C = F.normalize(C, dim=1, p=2)
+            self.keys.data.copy_(C)
+
+        # Custom initialization of values
         if isinstance(values_init, float):
             nn.init.constant_(self.values, values_init)
 

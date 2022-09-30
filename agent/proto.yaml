@@ -15,8 +15,12 @@ init_critic: true
 init_critic_mode: 'only_trunk'
 update_encoder: ${update_encoder}
 grad_critic_params: null
+optional_inits_args: null
 
 lr: 1e-4
+actor_lr: ${agent.lr}
+critic_lr: ${agent.lr}
+
 critic_target_tau: 0.01
 update_every_steps: 2
 num_expl_steps: ??? # to be specified later

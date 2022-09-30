@@ -103,7 +103,8 @@ class NonParametricProtoCritic(nn.Module):
 
 
 class NonParamValueProtoAgent(ProtoAgent):
-    def __init__(self, twin_q, actor_cfg, critic_cfg, **kwargs):
+    def __init__(self, twin_q, actor_cfg, critic_cfg,
+                 **kwargs):
         super().__init__(**kwargs)
 
         self.twin_q = twin_q
@@ -171,6 +172,15 @@ class NonParamValueProtoAgent(ProtoAgent):
                 else:
                     raise NotImplementedError
                 self.critic_target.load_state_dict(self.critic.state_dict())
+
+    def optional_inits(self):
+        """
+        Method to add more initialization options, typically for ablations
+        """
+        if self.optional_inits_args is None:
+            return
+
+        pass
 
     def update_critic(self, obs, action, reward, discount, next_obs, step):
         metrics = dict()

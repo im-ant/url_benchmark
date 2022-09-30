@@ -18,6 +18,7 @@ init_critic: true
 init_critic_mode: 'only_trunk'
 update_encoder: ${update_encoder}
 grad_critic_params: null
+optional_inits_args: null
 
 num_expl_steps: ??? # to be specified later
 lr: 1e-4

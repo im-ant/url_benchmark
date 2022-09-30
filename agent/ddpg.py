@@ -143,6 +143,7 @@ class DDPGAgent:
                  use_wandb,
                  update_encoder,
                  grad_critic_params,
+                 optional_inits_args,
                  meta_dim=0):
         self.reward_free = reward_free
         self.obs_type = obs_type
@@ -153,11 +154,13 @@ class DDPGAgent:
         self.init_actor = init_actor
         self.init_critic = init_critic
         self.init_critic_mode = init_critic_mode
+        self.optional_inits_args = optional_inits_args
 
         self.use_tb = use_tb
         self.use_wandb = use_wandb
 
         self.grad_critic_params = grad_critic_params
+
         self.hidden_dim = hidden_dim
         self.lr = lr
         self.actor_lr = actor_lr
@@ -230,6 +233,14 @@ class DDPGAgent:
             else:
                 raise NotImplementedError
             self.critic_target.load_state_dict(self.critic.state_dict())
+
+    def optional_inits(self):
+        """
+        Method to add more initialization options, typically for ablations
+        """
+        if self.optional_inits_args is None:
+            pass
+        pass
 
     def get_meta_specs(self):
         return tuple()
