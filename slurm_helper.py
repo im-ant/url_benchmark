@@ -10,6 +10,7 @@ import itertools
 from pathlib import Path
 import random
 import string
+import time
 import subprocess
 
 
@@ -165,6 +166,10 @@ class SbatchExecutor:
             sb_out = subprocess.run(['sbatch', str(slurm_filepath)],
                                     stdout=subprocess.PIPE)
             print(sb_out)  # ??
+
+            # Pause a bit so people don't get angry
+            time.sleep(0.1)
+
 
         print(f'Date time: {now_date}-{now_time}; job custom id: {global_jobid}')
 
