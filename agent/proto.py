@@ -193,12 +193,14 @@ class ProtoAgent(DDPGAgent):
             next_obs = next_obs.detach()
 
         # update critic
-        metrics.update(
-            self.update_critic(obs.detach(), action, reward, discount,
-                               next_obs.detach(), step))
+        for __ in range(self.num_critic_updates):
+            metrics.update(
+                self.update_critic(obs.detach(), action, reward, discount,
+                                   next_obs.detach(), step))
 
         # update actor
-        metrics.update(self.update_actor(obs.detach(), step))
+        for __ in range(self.num_actor_updates):
+            metrics.update(self.update_actor(obs.detach(), step))
 
         # update critic target
         utils.soft_update_params(self.encoder, self.encoder_target,

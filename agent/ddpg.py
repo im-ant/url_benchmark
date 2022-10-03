@@ -130,11 +130,11 @@ class DDPGAgent:
     def __init__(self, name, reward_free, obs_type, obs_shape, action_shape,
                  device, init_actor, init_critic, init_critic_mode,
                  base_optim_cfg, actor_optim_cfg, critic_optim_cfg,
-                 feature_dim,
-                 hidden_dim,
+                 update_every_steps, num_critic_updates, num_actor_updates,
                  critic_target_tau,
                  num_expl_steps,
-                 update_every_steps,
+                 feature_dim,
+                 hidden_dim,
                  stddev_schedule,
                  nstep,
                  batch_size,
@@ -165,8 +165,11 @@ class DDPGAgent:
         self.actor_optim_cfg = actor_optim_cfg
         self.critic_optim_cfg = critic_optim_cfg
 
-        self.critic_target_tau = critic_target_tau
         self.update_every_steps = update_every_steps
+        self.num_critic_updates = num_critic_updates
+        self.num_actor_updates = num_actor_updates
+
+        self.critic_target_tau = critic_target_tau
         self.num_expl_steps = num_expl_steps
         self.stddev_schedule = stddev_schedule
         self.stddev_clip = stddev_clip
@@ -299,6 +302,7 @@ class DDPGAgent:
             metrics['critic_loss'] = critic_loss.item()
 
         # optimize critic
+        # maybe TODO: separate encoder and critic updates?
         if self.encoder_opt is not None:
             self.encoder_opt.zero_grad(set_to_none=True)
         self.critic_opt.zero_grad(set_to_none=True)
@@ -360,11 +364,14 @@ class DDPGAgent:
             next_obs = next_obs.detach()
 
         # update critic
-        metrics.update(
-            self.update_critic(obs, action, reward, discount, next_obs, step))
+        for __ in range(self.num_critic_updates):
+            metrics.update(
+                self.update_critic(obs, action, reward, discount,
+                                   next_obs, step))
 
         # update actor
-        metrics.update(self.update_actor(obs.detach(), step))
+        for __ in range(self.num_actor_updates):
+            metrics.update(self.update_actor(obs.detach(), step))
 
         # update critic target
         utils.soft_update_params(self.critic, self.critic_target,

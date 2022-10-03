@@ -30,8 +30,11 @@ critic_optim_cfg:
   _target_: ${agent.base_optim_cfg._target_}
   lr: ${agent.base_optim_cfg.lr}
 
-critic_target_tau: 0.01
 update_every_steps: 2
+num_critic_updates: 1
+num_actor_updates: 1  # num actor updates per update step
+
+critic_target_tau: 0.01
 twin_q: True
 num_expl_steps: ??? # to be specified later
 

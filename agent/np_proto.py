@@ -213,6 +213,7 @@ class NonParamValueProtoAgent(ProtoAgent):
                     metrics[f'critic_{k}'] = info1[k]
 
         # optimize critic
+        # maybe TODO: separate encoder and critic updates?
         if self.encoder_opt is not None:
             self.encoder_opt.zero_grad(set_to_none=True)
         self.critic_opt.zero_grad(set_to_none=True)
@@ -283,11 +284,14 @@ class NonParamValueProtoAgent(ProtoAgent):
             next_obs = next_obs.detach()
 
         # Update critic
-        metrics.update(
-            self.update_critic(obs, action, reward, discount, next_obs, step))
+        for __ in range(self.num_critic_updates):
+            metrics.update(
+                self.update_critic(obs, action, reward, discount,
+                                   next_obs, step))
 
         # Update actor
-        metrics.update(self.update_actor(obs.detach(), step))
+        for __ in range(self.num_actor_updates):
+            metrics.update(self.update_actor(obs.detach(), step))
 
         # update critic target
         utils.soft_update_params(self.critic, self.critic_target,
