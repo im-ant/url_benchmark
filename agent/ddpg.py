@@ -129,7 +129,7 @@ class Critic(nn.Module):
 class DDPGAgent:
     def __init__(self, name, reward_free, obs_type, obs_shape, action_shape,
                  device, init_actor, init_critic, init_critic_mode,
-                 lr, actor_lr, critic_lr,
+                 base_optim_cfg, actor_optim_cfg, critic_optim_cfg,
                  feature_dim,
                  hidden_dim,
                  critic_target_tau,
@@ -161,10 +161,10 @@ class DDPGAgent:
 
         self.grad_critic_params = grad_critic_params
 
-        self.hidden_dim = hidden_dim
-        self.lr = lr
-        self.actor_lr = actor_lr
-        self.critic_lr = critic_lr
+        self.base_optim_cfg = base_optim_cfg
+        self.actor_optim_cfg = actor_optim_cfg
+        self.critic_optim_cfg = critic_optim_cfg
+
         self.critic_target_tau = critic_target_tau
         self.update_every_steps = update_every_steps
         self.num_expl_steps = num_expl_steps
@@ -172,6 +172,7 @@ class DDPGAgent:
         self.stddev_clip = stddev_clip
 
         self.feature_dim = feature_dim
+        self.hidden_dim = hidden_dim
         self.solved_meta = None
 
         self.update_encoder = update_encoder
@@ -205,12 +206,15 @@ class DDPGAgent:
 
         # optimizers
         if obs_type == 'pixels':
-            self.encoder_opt = torch.optim.Adam(self.encoder.parameters(),
-                                                lr=lr)
+            self.encoder_opt = hydra.utils.instantiate(self.base_optim_cfg,
+                params=self.encoder.parameters())
         else:
             self.encoder_opt = None
-        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
-        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+
+        self.actor_opt = hydra.utils.instantiate(self.actor_optim_cfg,
+            params=self.actor.parameters())
+        self.critic_opt = hydra.utils.instantiate(self.critic_optim_cfg,
+            params=self.critic.parameters())
 
         self.train()
         self.critic_target.train()

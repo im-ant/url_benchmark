@@ -1,5 +1,6 @@
 # @package agent
 _target_: agent.ddpg.DDPGAgent
+_recursive_: False
 name: ddpg
 reward_free: ${reward_free}
 obs_type: ??? # to be specified later
@@ -17,9 +18,16 @@ update_encoder: ${update_encoder}
 grad_critic_params: null
 optional_inits_args: null
 
-lr: 1e-4
-actor_lr: ${agent.lr}
-critic_lr: ${agent.lr}
+base_optim_cfg:
+  _target_: torch.optim.Adam
+  lr: 1e-4
+actor_optim_cfg:
+  _target_: ${agent.base_optim_cfg._target_}
+  lr: ${agent.base_optim_cfg.lr}
+critic_optim_cfg:
+  _target_: ${agent.base_optim_cfg._target_}
+  lr: ${agent.base_optim_cfg.lr}
+
 critic_target_tau: 0.01
 update_every_steps: 2
 num_expl_steps: ??? # to be specified later

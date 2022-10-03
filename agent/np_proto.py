@@ -129,16 +129,17 @@ class NonParamValueProtoAgent(ProtoAgent):
                 if not name.startswith(self.grad_critic_params):
                     param.requires_grad = False
 
-        # optimizers
-        self.proto_opt = torch.optim.Adam(utils.chain(
-            self.encoder.parameters(), self.predictor.parameters(),
-            self.projector.parameters()),
-            lr=self.lr)  # TODO: name this better
+        # Optimizers
+        self.proto_opt = hydra.utils.instantiate(self.base_optim_cfg,
+            params=utils.chain(
+                self.encoder.parameters(), self.predictor.parameters(),
+                self.projector.parameters())
+        )  # copied directly from proto.py, while deleting self.protos
 
-        self.actor_opt = torch.optim.Adam(self.actor.parameters(),
-                                          lr=self.actor_lr)
-        self.critic_opt = torch.optim.Adam(self.critic.parameters(),
-                                           lr=self.critic_lr)
+        self.actor_opt = hydra.utils.instantiate(self.actor_optim_cfg,
+            params=self.actor.parameters())
+        self.critic_opt = hydra.utils.instantiate(self.critic_optim_cfg,
+            params=self.critic.parameters())
 
         self.train()
         # TODO: why not critic.train() and only critic_target.train()????

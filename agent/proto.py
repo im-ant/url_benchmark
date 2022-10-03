@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import hydra
 import numpy as np
 import torch
 import torch.nn as nn
@@ -73,10 +74,11 @@ class ProtoAgent(DDPGAgent):
         self.queue_ptr = 0
 
         # optimizers
-        self.proto_opt = torch.optim.Adam(utils.chain(
-            self.encoder.parameters(), self.predictor.parameters(),
-            self.projector.parameters(), self.protos.parameters()),
-                                          lr=self.lr)
+        self.proto_opt = hydra.utils.instantiate(self.base_optim_cfg,
+            params=utils.chain(
+                self.encoder.parameters(), self.predictor.parameters(),
+                self.projector.parameters(), self.protos.parameters())
+        )
 
         self.predictor.train()
         self.projector.train()
