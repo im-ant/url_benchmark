@@ -47,6 +47,26 @@ class CosineSimilaritySF(BaseScoreFunction):
         return cossim
 
 
+class ScaledDotProductSF(BaseScoreFunction):
+    """Scaled dot product attention, based on transformers"""
+    def __init__(self, input_dim, query_dim):
+        super(ScaledDotProductSF, self).__init__()
+
+        self.input_dim = input_dim
+        self.query_dim = query_dim
+
+        self.q_proj = nn.Linear(input_dim, query_dim, bias=False)
+        self.k_proj = nn.Linear(input_dim, query_dim, bias=False)
+
+    def forward(self, mat1, mat2):
+        q_mat = self.q_proj(mat1)  # (n, query_dim)
+        k_mat = self.k_proj(mat2)  # (m, query_dim)
+
+        qk_prod = torch.matmul(q_mat, k_mat.T)  # (n, m)
+        sdp_sim = qk_prod / torch.sqrt(torch.tensor(self.query_dim))
+        return sdp_sim
+
+
 class NeuralDictionary(nn.Module):
     def __init__(self, key_dim, value_dim, capacity, keys_grad, values_grad):
         super(NeuralDictionary, self).__init__()
@@ -80,7 +100,6 @@ class SoftNeuralDictionary(NeuralDictionary):
             requires_grad=False)
         nn.init.zeros_(self.keys)
         nn.init.zeros_(self.values)
-
 
         self.score_fn = hydra.utils.instantiate(score_fn_cfg)
 
