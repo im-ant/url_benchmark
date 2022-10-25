@@ -89,19 +89,34 @@ class Workspace:
         print(torch.norm(self.agent.protos.weight.data, p=2, dim=1)[:10])
         print()
 
-        key_init = 'orthonormal'
+        key_init = '2d_gridmesh'
         if key_init == 'orthonormal':
             # TODO: modify this for protos instead of policy head
             nn.init.orthogonal_(self.agent.protos.weight.data)
             C = self.agent.protos.weight.data.clone()
             C = F.normalize(C, dim=1, p=2)
             self.agent.protos.weight.data.copy_(C)
+        elif key_init == '2d_gridmesh':
+            x_pts = torch.linspace(-0.3, 0.3, 23)  # mesh grid even covering
+            xy_grid = torch.cartesian_prod(x_pts, x_pts).to(self.device)
+            print('Grid size', xy_grid.size())
+
+            s = self.agent.encoder(xy_grid)
+            s = self.agent.predictor(s)
+            s_grid = F.normalize(s, dim=1, p=2)
+            print('projected size',s_grid.size())
+
+            C = s_grid[:self.agent.protos.weight.data.size(0), :]
+            self.agent.protos.weight.data.copy_(C)
+
+        else:
+            raise NotImplementedError
 
         print(self.agent.protos.weight.data.size())
         print(self.agent.protos.weight.data[0:3, 0:3])
         print(torch.norm(self.agent.protos.weight.data, p=2, dim=1)[:10])
         print()
-        
+
 
     def load_snapshot(self):
         snapshot_base_dir = Path(self.cfg.snapshot_base_dir)

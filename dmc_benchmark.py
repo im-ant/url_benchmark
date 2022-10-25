@@ -37,6 +37,10 @@ POINT_MASS_MAZE_TASKS = [
     'point_mass_maze_reach_bottom_right',
 ]
 
+POINT_TASKS = [
+    'point_velocity',
+]
+
 TASKS = WALKER_TASKS + QUADRUPED_TASKS + JACO_TASKS \
     + POINT_MASS_TASKS + POINT_MASS_MAZE_TASKS
 
@@ -45,4 +49,5 @@ PRIMAL_TASKS = {
     'jaco': 'jaco_reach_top_left',
     'quadruped': 'quadruped_walk',
     'point_mass_maze': 'point_mass_maze_reach_top_right',
+    'point': 'point_velocity'
 }
