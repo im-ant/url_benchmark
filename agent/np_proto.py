@@ -153,7 +153,11 @@ class NonParamValueProtoAgent(ProtoAgent):
         utils.hard_update_params(other.projector, self.projector)
 
         if self.init_actor:
-            if type(self.actor) == NonParametricProjectedActor:
+            if type(other.actor) == type(self.actor):
+                utils.hard_update_params(other.actor, self.actor)
+            # Assume the other one is a parametric proto RL agent here below
+            elif (type(self.actor) == NonParametricProjectedActor) or \
+                (type(self.actor) == NonParametricProjectedStochasticActor):
                 self.actor.predictor.weight.data.copy_(other.predictor.weight.data)
                 self.actor.policy_head.keys.data.copy_(other.protos.weight.data)
             elif type(self.actor) == NonParametricProtoActor:

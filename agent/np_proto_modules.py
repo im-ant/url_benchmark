@@ -58,6 +58,7 @@ class SoftNeuralDictionary(nn.Module):
             self.keys.data.copy_(C)
 
         # Custom initialization of values
+        self.values_init = values_init
         if isinstance(values_init, float):
             nn.init.constant_(self.values, values_init)
 
@@ -100,10 +101,66 @@ class SoftNeuralDictionary(nn.Module):
                 'entropy_avg_batch': ent_avg_batch,
                 'entropy_item_batch_avg': ent_item_batch_avg,
                 'prop_col_max_in_batch': (ncol_max_in_batch/weights.size(0)).item(),
+                'temperature': torch.exp(self.log_temp).item(),
             }
 
         return vs, info
 
+
+class StochasticNeuralDictionary(SoftNeuralDictionary):
+    """
+    Neural dictionary where the values are sampled based on a multinomail
+    distribution over key activations
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Custom initialization of values
+        if isinstance(self.values_init, float):
+            nn.init.constant_(self.values, self.values_init)
+        # Maybe TODO: add below, but also make it possible for actor to init this
+        #elif self.values_init == 'trunc_normal':
+        #    nn.init.constant_(self.values, means=0.0, std=1.0, a=-0.5, b=0.5)
+
+    def detailed_forward(self, x):
+        """
+        """
+        # Compute similarity and softmax
+        scores = self.score_fn(x, self.keys)  # (B, M)
+        ws = scores / torch.exp(self.log_temp)
+        log_weights = ws - torch.logsumexp(ws, axis=1, keepdim=True)  # (B, M)
+        weights = torch.exp(log_weights)
+
+        sampl_idxs = torch.multinomial(weights, num_samples=1)  # (B, 1)
+        sampl_idxs = sampl_idxs.flatten()  # (B, ), assume only one sample
+
+        # Sample
+        vs = self.values[sampl_idxs]  # (B, val_dim)
+
+        with torch.no_grad():
+            # Measure things
+            ent_avg_batch = torch_entropy(weights.mean(dim=0)).item()
+            ent_item_batch_avg = torch_entropy(weights).mean().item()
+
+            onehot_maxw = F.one_hot(weights.max(dim=1).indices,
+                                    num_classes=weights.size(1))
+            ncol_max_in_batch = torch.sum(onehot_maxw.sum(dim=0) >= 1.)
+
+            info = {
+                'simscore_avg': scores.mean().item(),
+                'simscore_max': scores.max(dim=1).values.mean().item(),
+                'weights_avg': weights.mean().item(),
+                'weights_max': weights.max(dim=1).values.mean().item(),
+                'values_param_avg': self.values.mean().item(),
+                'values_param_min': self.values.min().item(),
+                'values_param_max': self.values.max().item(),
+                'entropy_avg_batch': ent_avg_batch,
+                'entropy_item_batch_avg': ent_item_batch_avg,
+                'prop_col_max_in_batch': (ncol_max_in_batch/weights.size(0)).item(),
+                'temperature': torch.exp(self.log_temp).item(),
+            }
+
+        return vs, info
 
 
 class ParametricProjectedCritic(nn.Module):
@@ -194,6 +251,43 @@ class NonParametricProtoActor(nn.Module):
         h = self.trunk(obs)
         phi = self.policy_neck(h)
         mu, info = self.policy_head.detailed_forward(phi)
+
+        mu = torch.tanh(mu)
+        std = torch.ones_like(mu) * std
+
+        dist = utils.TruncatedNormal(mu, std)
+        return dist, info
+
+
+class NonParametricProjectedStochasticActor(nn.Module):
+    """
+    Identical to NonParametricProjectedActor, but uses
+    StochasticNeuralDictionary
+    """
+    def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
+                 key_dim, predictor_grad, snd_kwargs, device):
+        super().__init__()
+
+        self.key_dim = key_dim
+
+        # TODO: add everything to device here???
+        self.predictor = nn.Linear(obs_dim, key_dim)  # .to(self.device) ??
+        for p in self.predictor.parameters():
+            p.requires_grad = predictor_grad
+
+        snd_kwargs.value_dim = action_dim
+
+        self.policy_head = StochasticNeuralDictionary(**snd_kwargs).to(device)
+
+        self.apply(utils.weight_init)
+
+    def forward(self, obs, std):
+        dist, __ = self.detailed_forward(obs, std)
+        return dist
+
+    def detailed_forward(self, obs, std):
+        h = self.predictor(obs)
+        mu, info = self.policy_head.detailed_forward(h)
 
         mu = torch.tanh(mu)
         std = torch.ones_like(mu) * std
