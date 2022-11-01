@@ -61,7 +61,8 @@ class SoftNeuralDictionary(nn.Module):
         self.values_init = values_init
         if isinstance(values_init, float):
             nn.init.constant_(self.values, values_init)
-
+        elif self.values_init == 'trunc_normal':
+            nn.init.trunc_normal_(self.values, mean=0.0, std=1., a=-1., b=1.)
 
     def forward(self, x):
         vs, info = self.detailed_forward(x)

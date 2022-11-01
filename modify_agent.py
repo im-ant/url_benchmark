@@ -60,11 +60,10 @@ class Workspace:
                                 cfg.agent)
 
         # initialize from pretrained
-        if cfg.snapshot_ts > 0:
-            pretrained_agent = self.load_snapshot()['agent']
-            print(self.agent, pretrained_agent)
-            self.agent.init_from(pretrained_agent)
-            print('Loaded snapshop agent', pretrained_agent)
+        pretrained_agent = self.load_snapshot()['agent']
+        print(self.agent, pretrained_agent)
+        self.agent.init_from(pretrained_agent)
+        print('Loaded snapshop agent', pretrained_agent)
 
         # optional additional initialization for the agent
         self.agent.optional_inits()
@@ -101,9 +100,9 @@ class Workspace:
             xy_grid = torch.cartesian_prod(x_pts, x_pts).to(self.device)
             print('Grid size', xy_grid.size())
 
-            s = self.agent.encoder(xy_grid)
-            s = self.agent.predictor(s)
-            s_grid = F.normalize(s, dim=1, p=2)
+            s_grid = self.agent.encoder(xy_grid)
+            s_grid = self.agent.predictor(s_grid)
+            # s_grid = F.normalize(s, dim=1, p=2)
             print('projected size',s_grid.size())
 
             C = s_grid[:self.agent.protos.weight.data.size(0), :]

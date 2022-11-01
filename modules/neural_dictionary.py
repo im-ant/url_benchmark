@@ -47,6 +47,25 @@ class CosineSimilaritySF(BaseScoreFunction):
         return cossim
 
 
+class GaussianPNormSF(BaseScoreFunction):
+    """Gaussian Kernel applied to squared p-norm"""
+
+    def __init__(self, p=2.0, sigma=1.0):
+        """
+        :param p: p of p-norm, default is 2 for Euclidean distance
+        :param sigma: "standard deviation" of Gaussian Kernel
+        """
+        super(GaussianPNormSF, self).__init__()
+        self.p = p  # p norm
+        self.sigma = sigma
+
+    def forward(self, mat1, mat2):
+        pdist = torch.cdist(mat1, mat2, p=self.p)  # (n, m)
+        sim = torch.exp(- pdist**2. / (self.sigma**2.))
+        #print(sim)
+        return sim
+
+
 class ScaledDotProductSF(BaseScoreFunction):
     """Scaled dot product attention, based on transformers"""
     def __init__(self, input_dim, query_dim):
@@ -255,6 +274,19 @@ class NeuralKNN(NeuralDictionary):
 
 if __name__ == '__main__':
     # feature_dims, num_actions, k_neighbours,  memory_capacity
+    score_fn = GaussianPNormSF()
+    print(score_fn)
+
+    m1 = torch.randn((4,2))
+    m2 = torch.randn((3,2))
+    m1[:3, :] = m2
+    print(m1)
+    print(m2)
+
+    tmp = score_fn(m1, m2)
+    print(tmp)
+
+    """
     model = NeuralKNN(capacity=32, key_dim=4, k_neighbours=3)
     print(model)
     for name, param in model.named_parameters():
@@ -266,3 +298,4 @@ if __name__ == '__main__':
 
     output = model(batch_query)
     print(output)
+    """
