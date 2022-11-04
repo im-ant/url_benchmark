@@ -33,6 +33,7 @@ snapshots: [100000, 500000, 1000000, 2000000]
 # replay buffer
 replay_buffer_size: 1000000
 replay_buffer_num_workers: 4
+replay_save_snapshot: False 
 batch_size: ${agent.batch_size}
 nstep: ${agent.nstep}
 update_encoder: false # can be either true or false depending if we want to fine-tune encoder

@@ -24,6 +24,7 @@ snapshot_dir: ../../../models/${obs_type}/${domain}/${agent.name}/${seed}
 # replay buffer
 replay_buffer_size: 1000000
 replay_buffer_num_workers: 4
+replay_save_snapshot: False 
 batch_size: ${agent.batch_size}
 nstep: ${agent.nstep}
 update_encoder: true # should always be true for pre-training
