@@ -158,9 +158,10 @@ class Workspace:
 
         # ===
         # Load dataset
-        base_path = Path('/home/anthony/Project/url_benchmark/exp_sweep')
-        dataset_path = base_path / '2022.11.04/162315_proto_exp/0/buffer/'
+        run_path = Path(self.cfg.base_dir) / self.cfg.run_dir
+        dataset_path = run_path / self.cfg.data_path
 
+        print('Dataset path:', dataset_path)
         self.file_dataset = FilesDataset(dataset_path, nstep=1, discount=0.99)
         print('Dataset:', self.file_dataset)
 
@@ -169,7 +170,7 @@ class Workspace:
         self.agent = self.initialize_agent()
         # self.agent.optional_inits()  # optional additional init?
         # meta_specs = self.agent.get_meta_specs()  # get meta specs
-        
+
 
     def initialize_agent(self):
         # ==
