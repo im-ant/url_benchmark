@@ -1,0 +1,40 @@
+defaults:
+  - agent: ddpg
+  - override hydra/launcher: joblib
+
+# original: - override hydra/launcher: submitit-local
+
+# Input paths
+base_dir: '/home/anthony/Project/url_benchmark/'
+run_dir: 'exp_sweep/???'  # Mandatory to set this
+data_path: './buffer'
+init_cfg_path: './.hydra/config.yaml'  # if null, use default initializations? TODO
+model_path: null  # if null, do not load pre-trained model
+
+# Saving file paths
+npz_out_dir: './saved_npz'
+
+#
+loader_batch_size: 512
+batch_in_out_file: 16
+
+experiment: 'enc'
+seed: 1
+device: cuda
+
+hydra:
+  run:
+    dir: ./exp_local/${now:%Y.%m.%d}/${now:%H%M%S}_${experiment}
+  sweep:
+    dir: ./exp_sweep/${now:%Y.%m.%d}/${now:%H%M%S}_${experiment}
+    subdir: ${hydra.job.num}
+
+# Original (with submitit-local)
+#  launcher:
+#    timeout_min: 4300
+#    cpus_per_task: 10
+#    gpus_per_node: 1
+#    tasks_per_node: 1
+#    mem_gb: 160
+#    nodes: 1
+#    submitit_folder: ./exp_sweep/${now:%Y.%m.%d}/${now:%H%M%S}_${agent.name}_${experiment}/.slurm
