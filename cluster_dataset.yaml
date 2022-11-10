@@ -1,0 +1,32 @@
+defaults:
+  - override hydra/launcher: joblib
+
+# original: - override hydra/launcher: submitit-local
+
+# Input paths
+base_dir: '/home/anthony/Project/url_benchmark/'
+data_path: 'exp_sweep/???'
+
+save_model: True
+snapshot_out_dir: './model_out'
+
+experiment: 'clus'
+seed: 1
+device: 'cpu'
+
+subsample_data: False
+subsample_size: 10000
+
+clustering:
+  _target_: sklearn.cluster.KMeans
+  _recursive_: False
+  n_clusters: 128
+  random_state: ${seed}
+
+
+hydra:
+  run:
+    dir: ./exp_local/${now:%Y.%m.%d}/${now:%H%M%S}_${experiment}
+  sweep:
+    dir: ./exp_sweep/${now:%Y.%m.%d}/${now:%H%M%S}_${experiment}
+    subdir: ${hydra.job.num}
