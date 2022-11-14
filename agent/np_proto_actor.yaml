@@ -71,6 +71,9 @@ actor_cfg:
     keys_grad: False
     values_grad: True
     temperature_grad: False
+    load_keys: False
+    keys_init_scheme: 'orthonormal'  # only used if load_keys = False
+    load_keys_path: null  # only used if load_keys = True
     values_init: null
     device: ${device}
     score_fn_cfg:

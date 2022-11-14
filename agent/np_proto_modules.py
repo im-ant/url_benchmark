@@ -1,6 +1,9 @@
 # ==========
 # Modules the np_proto class of models, including ablations
 # ==========
+from pathlib import Path
+import joblib
+
 import hydra
 import numpy as np
 import torch
@@ -27,11 +30,12 @@ def torch_entropy(X):
 
 class SoftNeuralDictionary(nn.Module):
     def __init__(self, capacity, key_dim, value_dim, temperature,
-                 keys_grad, values_grad, temperature_grad, values_init,
+                 keys_grad, values_grad, temperature_grad,
+                 load_keys, keys_init_scheme, load_keys_path, values_init,
                  score_fn_cfg, device):
         super().__init__()
 
-        self.device = device
+        self.device = torch.device(device)
 
         self.keys = nn.parameter.Parameter(
             torch.empty((capacity, key_dim)),
@@ -50,12 +54,19 @@ class SoftNeuralDictionary(nn.Module):
         # Initialize keys to be orthonormal matrix
         # TODO: make customizable, or, init to unit vectors randomly sampled in
         #       d-dimensional space
-        key_init_scheme = 'orthonormal'
-        if key_init_scheme == 'orthonormal':
+        self.keys_init_scheme = keys_init_scheme
+        if self.keys_init_scheme == 'orthonormal':
             nn.init.orthogonal_(self.keys)
             C = self.keys.data.clone()
             C = F.normalize(C, dim=1, p=2)
             self.keys.data.copy_(C)
+        else:
+            raise NotImplementedError
+
+        self.load_keys = load_keys
+        if self.load_keys:
+            self.keys.data.copy_(self.load_keys_from(load_keys_path))
+            print('Loaded SoftNeuralDictionary keys from:', load_keys_path)
 
         # Custom initialization of values
         self.values_init = values_init
@@ -63,6 +74,31 @@ class SoftNeuralDictionary(nn.Module):
             nn.init.constant_(self.values, values_init)
         elif self.values_init == 'trunc_normal':
             nn.init.trunc_normal_(self.values, mean=0.0, std=1., a=-1., b=1.)
+
+    def load_keys_from(self, load_path):
+        keys_file_path = Path(load_path)
+
+        if load_path.endswith('.pkl'):
+            # Assume .pkl files are sklearn kmeans models
+            centr_model = joblib.load(keys_file_path)
+            assert 'KMeans' in type(centr_model).__name__
+
+            np_centr_mat = centr_model.cluster_centers_
+            keys_mat = torch.from_numpy(np_centr_mat)
+        elif load_path.endswith('.pt'):
+            # Assume .pt files are proto RL agents
+            with keys_file_path.open('rb') as f:
+                payload = torch.load(f, map_location=self.device)
+            agent = payload['agent']
+            # NOTE: currently only works for ProtoAgent
+            assert type(agent).__name__ == 'ProtoAgent'
+
+            agent.normalize_protos()
+            keys_mat = agent.protos.weight.clone()
+        else:
+            raise NotImplementedError
+
+        return keys_mat
 
     def forward(self, x):
         vs, info = self.detailed_forward(x)
@@ -212,6 +248,40 @@ class ParametricProjectedCritic(nn.Module):
         qs = self.critic_head(h)  # qs: (B, 1)
 
         return qs, qs, None, None  # TODO: very hacky right now, implement twin Q later
+
+
+class NonParametricTrunkProjectedActor(nn.Module):
+    def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
+                 key_dim, trunk_grad, snd_kwargs, device):
+        super().__init__()
+
+        self.key_dim = key_dim
+
+        # TODO: add everything to device here???
+        self.trunk = nn.Sequential(nn.Linear(obs_dim, key_dim),
+                                   nn.LayerNorm(key_dim), nn.Tanh())
+        for p in self.trunk.parameters():
+            p.requires_grad = trunk_grad
+
+        snd_kwargs.value_dim = action_dim
+        self.policy_head = SoftNeuralDictionary(**snd_kwargs).to(device)
+
+        self.apply(utils.weight_init)
+
+    def forward(self, obs, std):
+        dist, __ = self.detailed_forward(obs, std)
+        return dist
+
+    def detailed_forward(self, obs, std):
+        h = self.trunk(obs)
+        mu, info = self.policy_head.detailed_forward(h)
+
+        mu = torch.tanh(mu)
+        std = torch.ones_like(mu) * std
+
+        dist = utils.TruncatedNormal(mu, std)
+        return dist, info
+
 
 
 class NonParametricProtoActor(nn.Module):

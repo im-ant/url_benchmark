@@ -30,7 +30,7 @@ class BaseSimilarityFunction(nn.Module):
         return None
 
 
-class NonParametricProjectedActor(nn.Module):
+class NonParametricLinearProjectedActor(nn.Module):
     def __init__(self, obs_type, obs_dim, action_dim, feature_dim, hidden_dim,
                  key_dim, predictor_grad, snd_kwargs, device):
         super().__init__()
@@ -149,34 +149,47 @@ class NonParamValueProtoAgent(ProtoAgent):
         # Regular initialization similar to base proto
         utils.hard_update_params(other.encoder, self.encoder)
 
+        # TODO: need to check if these are present before loading
         utils.hard_update_params(other.predictor, self.predictor)
         utils.hard_update_params(other.projector, self.projector)
 
         if self.init_actor:
             if type(other.actor) == type(self.actor):
+                # If the same class, just load all the same weights
                 utils.hard_update_params(other.actor, self.actor)
-            # Assume the other one is a parametric proto RL agent here below
-            elif (type(self.actor) == NonParametricProjectedActor) or \
-                (type(self.actor) == NonParametricProjectedStochasticActor):
-                self.actor.predictor.weight.data.copy_(other.predictor.weight.data)
-                self.actor.policy_head.keys.data.copy_(other.protos.weight.data)
-            elif type(self.actor) == NonParametricProtoActor:
-                self.actor.policy_head.keys.data.copy_(other.protos.weight.data)
+            elif type(other).__name__ == 'ProtoAgent':
+                if type(self.actor).__name__ in [
+                    'NonParametricLinearProjectedActor',
+                    'NonParametricProjectedStochasticActor']:
+                    self.actor.predictor.weight.data.copy_(
+                        other.predictor.weight.data)
+                    print(f'Loaded predictor weight from {type(other.actor)} to self {type(self.actor)}')
+                elif type(self.actor).__name__ in [
+                    'NonParametricTrunkProjectedActor']:
+                    utils.hard_update_params(other.actor.trunk,
+                                             self.actor.trunk)
+                    print(f'Loaded trunk from {type(other.actor)} to self {type(self.actor)}')
+                else:
+                    raise NotImplementedError
             else:
-                utils.hard_update_params(other.actor, self.actor)
+                raise NotImplementedError
 
         if self.init_critic:
-            if type(self.critic) == NonParametricProtoCritic:
+            if type(other.critic) == type(self.critic):
+                if self.init_critic_mode == 'only_trunk':
+                    utils.hard_update_params(other.critic.trunk, self.critic.trunk)
+                else:
+                    # TODO: should have an option to initialize all weights??
+                    raise NotImplementedError
+            elif type(self.critic) == NonParametricProtoCritic:
                 self.critic.predictor.weight.data.copy_(other.predictor.weight.data)
                 self.critic.critic_head.keys.data.copy_(other.protos.weight.data)
             elif type(self.critic) == ParametricProjectedCritic:  # ablation
                 self.critic.predictor.weight.data.copy_(other.predictor.weight.data)
             else:
-                if self.init_critic_mode == 'only_trunk':
-                    utils.hard_update_params(other.critic.trunk, self.critic.trunk)
-                else:
-                    raise NotImplementedError
-                self.critic_target.load_state_dict(self.critic.state_dict())
+                raise NotImplementedError
+
+            self.critic_target.load_state_dict(self.critic.state_dict())
 
     def optional_inits(self):
         """
@@ -184,8 +197,6 @@ class NonParamValueProtoAgent(ProtoAgent):
         """
         if self.optional_inits_args is None:
             return
-
-        pass
 
     def update_critic(self, obs, action, reward, discount, next_obs, step):
         metrics = dict()
